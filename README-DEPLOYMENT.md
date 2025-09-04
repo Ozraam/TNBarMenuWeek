@@ -8,7 +8,7 @@ For the easiest deployment, use our automated deployment script:
 
 ```bash
 # Download and run the deployment script
-curl -L -o deploy.sh https://github.com/your-username/tnbarmenu/releases/latest/download/deploy.sh
+curl -L -o deploy.sh https://github.com/ozraam/tnbarmenu/releases/latest/download/deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -29,7 +29,7 @@ This script will:
 
 1. **Download the production compose file:**
    ```bash
-   wget https://github.com/your-username/tnbarmenu/releases/latest/download/docker-compose.prod.yml
+   wget https://github.com/ozraam/tnbarmenu/releases/latest/download/docker-compose.prod.yml
    ```
 
 2. **Create the build directory:**
