@@ -1,0 +1,25 @@
+# Docker Compose override for local development
+# This file extends docker-compose.yml for local development
+version: '3'
+
+services:
+  backend:
+    build:
+      context: ./MenuGeneratorBarbare
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    volumes:
+      # Mount the entire MenuGeneratorBarbare directory for development
+      - ./MenuGeneratorBarbare:/app
+      # Specifically mount the build directory for generated files
+      - ./MenuGeneratorBarbare/build:/app/build
+
+  frontend:
+    build:
+      context: .
+    # For development, you might want to mount the source code
+    # Uncomment the following if you want live reloading during development:
+    # volumes:
+    #   - ./src:/app/src
+    #   - ./public:/app/public

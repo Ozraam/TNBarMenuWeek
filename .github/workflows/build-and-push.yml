@@ -1,0 +1,255 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata for backend
+      id: meta-backend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Extract metadata for frontend
+      id: meta-frontend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./MenuGeneratorBarbare
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+        build-args: |
+          USER_ID=1000
+          GROUP_ID=1000
+        platforms: linux/amd64,linux/arm64
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
+        platforms: linux/amd64,linux/arm64
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  create-release-artifacts:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Create production docker-compose file
+      run: |
+        # Create a production-ready docker-compose file
+        cat > docker-compose.prod.yml << 'EOF'
+        version: '3'
+        
+        services:
+          frontend:
+            image: ghcr.io/${{ github.repository }}-frontend:${TAG:-latest}
+            ports:
+              - "3000:3000"
+            environment:
+              - VITE_API_URL=http://backend:5000
+              - VITE_BACKEND_URL=http://backend:5000
+              - VITE_PUBLIC_API_URL=http://localhost:5000
+            depends_on:
+              backend:
+                condition: service_healthy
+            networks:
+              - app-network
+            healthcheck:
+              test: ["CMD", "wget", "--spider", "http://localhost:3000"]
+              interval: 10s
+              timeout: 5s
+              retries: 3
+              start_period: 15s
+        
+          backend:
+            image: ghcr.io/${{ github.repository }}-backend:${TAG:-latest}
+            ports:
+              - "5000:5000"
+            environment:
+              - FLASK_HOST=0.0.0.0
+              - FLASK_PORT=5000
+            volumes:
+              - ./build:/app/build
+            networks:
+              - app-network
+            healthcheck:
+              test: ["CMD", "curl", "-f", "http://localhost:5000/getMealList"]
+              interval: 10s
+              timeout: 5s
+              retries: 3
+              start_period: 10s
+        
+        networks:
+          app-network:
+            driver: bridge
+        EOF
+
+    - name: Create deployment instructions
+      run: |
+        cat > DEPLOYMENT.md << 'EOF'
+        # Deployment Instructions
+        
+        ## Prerequisites
+        - Docker and Docker Compose installed on the target machine
+        - Internet connection to pull images from GitHub Container Registry
+        
+        ## Quick Start
+        
+        1. Download the `docker-compose.prod.yml` file to your target machine
+        
+        2. Create the build directory:
+           ```bash
+           mkdir -p build
+           ```
+        
+        3. Run the application:
+           ```bash
+           docker compose -f docker-compose.prod.yml up -d
+           ```
+        
+        4. Access the application:
+           - Frontend: http://localhost:3000
+           - Backend API: http://localhost:5000
+        
+        ## Using a specific version
+        
+        To use a specific tagged version instead of latest:
+        ```bash
+        TAG=v1.0.0 docker compose -f docker-compose.prod.yml up -d
+        ```
+        
+        ## Stopping the application
+        
+        ```bash
+        docker compose -f docker-compose.prod.yml down
+        ```
+        
+        ## Updating to a newer version
+        
+        ```bash
+        docker compose -f docker-compose.prod.yml pull
+        docker compose -f docker-compose.prod.yml up -d
+        ```
+        
+        ## Troubleshooting
+        
+        1. Check logs:
+           ```bash
+           docker compose -f docker-compose.prod.yml logs
+           ```
+        
+        2. If you get permission errors with the build directory:
+           ```bash
+           sudo chown -R $USER:$USER build
+           ```
+        
+        ## Configuration
+        
+        The application uses the following ports by default:
+        - Frontend: 3000
+        - Backend: 5000
+        
+        You can change these in the docker-compose.prod.yml file if needed.
+        EOF
+
+    - name: Create .env template
+      run: |
+        cat > .env.template << 'EOF'
+        # Optional: Specify image tag (defaults to 'latest')
+        # TAG=v1.0.0
+        
+        # Optional: Custom ports (defaults shown)
+        # FRONTEND_PORT=3000
+        # BACKEND_PORT=5000
+        EOF
+
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-files
+        path: |
+          docker-compose.prod.yml
+          DEPLOYMENT.md
+          .env.template
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        files: |
+          docker-compose.prod.yml
+          DEPLOYMENT.md
+          .env.template
+        body: |
+          ## Docker Images
+          
+          This release includes pre-built Docker images that can be deployed on any machine with Docker installed.
+          
+          **Backend Image:** `ghcr.io/${{ github.repository }}-backend:${{ github.ref_name }}`
+          **Frontend Image:** `ghcr.io/${{ github.repository }}-frontend:${{ github.ref_name }}`
+          
+          ## Quick Deployment
+          
+          1. Download `docker-compose.prod.yml` from this release
+          2. Run: `mkdir -p build && docker compose -f docker-compose.prod.yml up -d`
+          3. Access at: http://localhost:3000
+          
+          See `DEPLOYMENT.md` for detailed instructions.
