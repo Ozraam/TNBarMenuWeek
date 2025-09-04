@@ -1,0 +1,86 @@
+{
+    "header": ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"],
+    "text-custom-french": "Voici le menu de cette semaine !",
+    "text-custom-english": "Here is the menu for this week!",
+    "content": [
+        {
+            "day": "Lundi",
+            "content": [
+                {
+                    "text": "Alpin",
+                    "img": "Alpin",
+                    "is_meal": true
+                },
+                {
+                    "text": "Athénien",
+                    "img": "Athénien",
+                    "is_meal": true
+                }
+            ]
+        },
+        {
+            "day": "Mardi",
+            "content": [
+                {
+                    "text": "Spartiate",
+                    "img": "Spartiate",
+                    "is_meal": true
+                },
+                {
+                    "text": "Aller à Abso mercredi",
+                    "is_meal": false
+                }
+            ]
+        },
+        {
+            "day": "Mercredi",
+            "content": [
+                {
+                    "text": "Le 25",
+                    "img": "Le25",
+                    "is_meal": true
+                },
+                {
+                    "text": "Bain de fraicheur",
+                    "img": "BainDeFraicheur",
+                    "is_meal": true
+                }
+            ]
+        },
+        {
+            "day": "Jeudi",
+            "content": [
+                {
+                    "text": "Pizza",
+                    "img": "Pizzas",
+                    "is_meal": true
+                }
+            ]
+        },
+        {
+            "day": "Vendredi",
+            "content": [
+                {
+                    "text": "Red Cold",
+                    "img": "RedCold",
+                    "is_meal": true
+                },
+                {
+                    "text": "Chèvre Frais",
+                    "img": "Chèvre",
+                    "is_meal": true
+                }
+            ]
+        },
+        {
+            "day": "Samedi",
+            "no_head": true,
+            "content": [
+                {
+                    "text": "Bonne\nvacances !\nOn se retrouve à\nla rentrée !",
+                    "is_meal": false
+                }
+            ]
+        }
+    ]
+}
