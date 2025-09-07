@@ -8,7 +8,7 @@ For the easiest deployment, use our automated deployment script:
 
 ```bash
 # Download and run the deployment script
-curl -L -o deploy.sh https://github.com/ozraam/tnbarmenu/releases/latest/download/deploy.sh
+curl -L -o deploy.sh https://raw.githubusercontent.com/Ozraam/TNBarMenuWeek/refs/tags/v1.0.0/deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
