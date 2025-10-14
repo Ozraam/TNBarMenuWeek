@@ -3,6 +3,7 @@
 	import DayOption from './DayOption.svelte';
 	import type { DayOptions } from '../type';
 	import { imgLinkState, loadingState } from '$lib/loadingState.svelte';
+	import { buildApiUrl } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { json } from '@sveltejs/kit';
 
@@ -55,8 +56,8 @@
 		image: string;
 	}[] = $state([]);
 
-	onMount(() => {
-		fetch('http://localhost:5000/getMealList', {
+	 onMount(() => {
+		 fetch(buildApiUrl('/getMealList'), {
 			method: 'GET'
 		}).then((data) => {
 			if (data.ok) {
@@ -68,7 +69,7 @@
 			}
 		});
 
-		fetch('http://localhost:5000/getLastMenu', {
+		fetch(buildApiUrl('/getLastMenu'), {
 			method: 'GET'
 		}).then(async (data) => {
 			if (data.ok) {
@@ -133,7 +134,7 @@
 	 */
 	function generateImage() {
 		let cli = weekOptionToCLI();
-		fetch('http://localhost:5000/generateImages?menu=' + cli, {
+		fetch(buildApiUrl(`/generateImages?menu=${encodeURIComponent(cli)}`), {
 			method: 'GET'
 		}).then(async (data) => {
 			if (data.ok) {

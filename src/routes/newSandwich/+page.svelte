@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { classList } from '$lib/classList';
 	import { onMount } from 'svelte';
+	import { buildApiUrl } from '$lib/api';
 	
 	// Import our new components
 	import SandwichBasicInfo from '$lib/sandwichForm/SandwichBasicInfo.svelte';
@@ -33,7 +34,7 @@
 
 	async function fetchExistingSandwiches() {
 		try {
-			const response = await fetch('http://localhost:5000/getMealList');
+			const response = await fetch(buildApiUrl('/getMealList'));
 			if (response.ok) {
 				const mealList = await response.json();
 				existingNames = mealList.map((meal: any) => meal.name);
@@ -98,7 +99,7 @@
 			}
 
 			// This is a placeholder endpoint - actual implementation would depend on your backend
-			const response = await fetch('http://localhost:5000/addSandwich', {
+			const response = await fetch(buildApiUrl('/addSandwich'), {
 				method: 'POST',
 				body: formData
 			});

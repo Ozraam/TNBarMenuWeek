@@ -106,7 +106,6 @@ jobs:
             environment:
               - VITE_API_URL=http://backend:5000
               - VITE_BACKEND_URL=http://backend:5000
-              - VITE_PUBLIC_API_URL=http://localhost:5000
             depends_on:
               backend:
                 condition: service_healthy
