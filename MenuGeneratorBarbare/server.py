@@ -1,7 +1,8 @@
 import json
+import os
 import time
 from pathlib import Path
-from flask import Flask, jsonify, send_file, request
+from flask import Flask, jsonify, send_file, request, make_response
 from main import generate_img_from_args, CLIParser
 from paths import get_build_dir
 
@@ -15,6 +16,9 @@ MEAL_LIST_FILE = PROJECT_ROOT / "mealList.json"
 LAST_MENU_FILE = BUILD_DIR / "last_menu.txt"
 MAIL_FILE = BUILD_DIR / "mail.txt"
 DEFAULT_MAIL_FILE = DEFAULT_IMAGE_DIR / "mail.txt"
+ALLOWED_ORIGIN = os.getenv("CORS_ALLOW_ORIGIN", "*")
+ALLOWED_HEADERS = os.getenv("CORS_ALLOW_HEADERS", "Authorization, Content-Type")
+ALLOWED_METHODS = os.getenv("CORS_ALLOW_METHODS", "GET, POST, OPTIONS")
 
 # Load meal list at application startup
 def load_meal_list():
@@ -31,10 +35,30 @@ def load_meal_list():
 mealList = load_meal_list()
 
 # Helper functions
+def apply_cors_headers(response):
+    """Attach standard CORS headers to the outgoing response."""
+    response.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+    response.headers["Access-Control-Allow-Headers"] = ALLOWED_HEADERS
+    response.headers["Access-Control-Allow-Methods"] = ALLOWED_METHODS
+    return response
+
+
 def cors_response(response):
     """Add CORS headers to response"""
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response
+    return apply_cors_headers(response)
+
+
+@app.before_request
+def handle_preflight():
+    """Handle CORS preflight requests early."""
+    if request.method == "OPTIONS":
+        return apply_cors_headers(make_response("", 204))
+
+
+@app.after_request
+def attach_cors(response):
+    """Ensure every response carries the CORS headers."""
+    return apply_cors_headers(response)
 
 def save_json_to_file(data, filepath):
     """Save data as JSON to the specified file"""
