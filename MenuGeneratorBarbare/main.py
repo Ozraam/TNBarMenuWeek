@@ -1,24 +1,27 @@
 import json
-import os
 from datetime import date, timedelta
 import locale
+from pathlib import Path
 from unidecode import unidecode
 from PIL import Image, ImageDraw, ImageFont
+from paths import get_build_dir
 
 # Constants
-LOGO_PATH = "Barbare.png"
-FONT_PATH = "./OpenSans-VariableFont_wdth,wght.ttf"
+PROJECT_ROOT = Path(__file__).resolve().parent
+LOGO_PATH = PROJECT_ROOT / "Barbare.png"
+FONT_PATH = PROJECT_ROOT / "OpenSans-VariableFont_wdth,wght.ttf"
 COLORS = {
     "background": "#FFF4EA",
     "primary": "#E6A515",
     "secondary": "#B77236",
     "text": "#FFF4EA"
 }
-SANDWICH_DIR = "./Sandwichlogo/"
-OUTPUT_DIR = "build"
+SANDWICH_DIR = PROJECT_ROOT / "Sandwichlogo"
+OUTPUT_DIR = get_build_dir()
 
 class MenuGenerator:
     def __init__(self):
+        self.output_dir = OUTPUT_DIR
         self.ensure_output_directory()
         locale.setlocale(locale.LC_TIME, 'fr_FR.utf8')  # Set locale to French
         
@@ -68,8 +71,7 @@ class MenuGenerator:
         
     def ensure_output_directory(self):
         """Ensure the output directory exists"""
-        if not os.path.isdir(OUTPUT_DIR):
-            os.makedirs(OUTPUT_DIR)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
             
     def get_next_week_text(self):
         """Return the date of the next Monday and Friday in French format"""
@@ -81,7 +83,7 @@ class MenuGenerator:
     
     def get_font(self, size):
         """Get a font with the specified size"""
-        return ImageFont.truetype(FONT_PATH, size)
+        return ImageFont.truetype(str(FONT_PATH), size)
     
     def create_base_image(self, layout_type):
         """Create a new image with the specified layout"""
@@ -257,7 +259,7 @@ class MenuGenerator:
             for content in day['content']:
                 if content['is_meal']:
                     # Add meal image
-                    sandwich_path = SANDWICH_DIR + content['img'] + ".png"
+                    sandwich_path = SANDWICH_DIR / f"{content['img']}.png"
                     sandwich_img = Image.open(sandwich_path).convert("RGBA")
                     sandwich_size = sandwich_img.size
                     desired_height = int(desired_img_width * sandwich_size[1] / sandwich_size[0])
@@ -348,7 +350,7 @@ class MenuGenerator:
     def generate_email_text(self, week_data):
         """Generate text for email with ingredient information"""
         # Load ingredients
-        with open("ingredients.json", encoding="utf8") as f:
+        with open(PROJECT_ROOT / "ingredients.json", encoding="utf8") as f:
             ingredients = json.load(f)
             
         unique_meals = self.flatten_meals(week_data)
@@ -398,10 +400,10 @@ class MenuGenerator:
         email_text = self.generate_email_text(week_data)
         
         # Save outputs
-        vertical_img.save(f"{OUTPUT_DIR}/{filename}-vertical.png")
-        horizontal_img.save(f"{OUTPUT_DIR}/{filename}-horizontal.png")
+        vertical_img.save(self.output_dir / f"{filename}-vertical.png")
+        horizontal_img.save(self.output_dir / f"{filename}-horizontal.png")
         
-        with open(f"{OUTPUT_DIR}/mail.txt", 'w', encoding="utf8") as f:
+        with open(self.output_dir / "mail.txt", 'w', encoding="utf8") as f:
             f.write(email_text)
             
         # Print any warnings
@@ -506,7 +508,7 @@ def generate_img_from_args(args, filename="menu"):
     return generator.generate_menu(week_data, filename)
 
 if __name__ == "__main__":
-    with open("cli.txt", encoding="utf8") as f:
+    with open(PROJECT_ROOT / "cli.txt", encoding="utf8") as f:
         args = f.read().split()
         
     parser = CLIParser()

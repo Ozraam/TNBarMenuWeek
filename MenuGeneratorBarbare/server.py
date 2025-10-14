@@ -1,25 +1,25 @@
 import json
-import os
 import time
+from pathlib import Path
 from flask import Flask, jsonify, send_file, request
-from PIL import Image
-from io import BytesIO
 from main import generate_img_from_args, CLIParser
+from paths import get_build_dir
 
 app = Flask(__name__)
 
 # Constants
-DEFAULT_IMAGE_DIR = "default_img"
-BUILD_DIR = "build"
-MEAL_LIST_FILE = "mealList.json"
-LAST_MENU_FILE = f"{BUILD_DIR}/last_menu.txt"
-MAIL_FILE = f"{BUILD_DIR}/mail.txt"
-DEFAULT_MAIL_FILE = f"{DEFAULT_IMAGE_DIR}/mail.txt"
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_IMAGE_DIR = PROJECT_ROOT / "default_img"
+BUILD_DIR = get_build_dir()
+MEAL_LIST_FILE = PROJECT_ROOT / "mealList.json"
+LAST_MENU_FILE = BUILD_DIR / "last_menu.txt"
+MAIL_FILE = BUILD_DIR / "mail.txt"
+DEFAULT_MAIL_FILE = DEFAULT_IMAGE_DIR / "mail.txt"
 
 # Load meal list at application startup
 def load_meal_list():
     try:
-        with open(MEAL_LIST_FILE, "r") as f:
+        with open(MEAL_LIST_FILE, "r", encoding="utf8") as f:
             return json.load(f)
     except FileNotFoundError:
         app.logger.warning(f"{MEAL_LIST_FILE} not found, using empty dictionary")
@@ -38,20 +38,22 @@ def cors_response(response):
 
 def save_json_to_file(data, filepath):
     """Save data as JSON to the specified file"""
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, "w", encoding="utf8") as f:
+    path_obj = Path(filepath)
+    path_obj.parent.mkdir(parents=True, exist_ok=True)
+    with open(path_obj, "w", encoding="utf8") as f:
         json.dump(data, f, ensure_ascii=False)
 
 def load_json_from_file(filepath, default=None):
     """Load JSON data from file, return default if file doesn't exist"""
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf8") as f:
+    path_obj = Path(filepath)
+    if path_obj.exists():
+        with open(path_obj, "r", encoding="utf8") as f:
             return json.load(f)
     return default
 
 def get_image_path(image_type, epoch):
     """Get the image path based on type and epoch"""
-    return f"{BUILD_DIR}/{epoch}-{image_type}.png"
+    return BUILD_DIR / f"{epoch}-{image_type}.png"
 
 # Routes
 @app.route('/getMealList', methods=['GET'])
@@ -69,7 +71,6 @@ def generate_images():
     try:
         last_menu = CLIParser().parse_arguments(args)
         filename = str(int(time.time()))
-        
         save_json_to_file(last_menu, LAST_MENU_FILE)
         generate_img_from_args(args, filename)
         
@@ -116,7 +117,7 @@ def get_menu_image(image_type):
     try:
         return send_file(file_name, mimetype='image/png')
     except FileNotFoundError:
-        return send_file(f"{DEFAULT_IMAGE_DIR}/{image_type}.png", mimetype='image/png')
+        return send_file(DEFAULT_IMAGE_DIR / f"{image_type}.png", mimetype='image/png')
 
 if __name__ == '__main__':
     # This block only runs when executing the script directly (development mode)
