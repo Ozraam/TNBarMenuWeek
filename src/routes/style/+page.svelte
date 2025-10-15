@@ -362,7 +362,7 @@
                 <header>
                     <h3 class="text-xl font-semibold">Logo principal</h3>
                     <p class="text-sm text-gray-200">
-                        Choisissez le logo affiche sur les menus. Le chemin est relatif au dossier du generateur.
+                        Choisissez le logo affiché sur les menus. Le chemin est relatif au dossier du générateur.
                     </p>
                 </header>
 
