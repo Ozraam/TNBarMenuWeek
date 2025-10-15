@@ -27,7 +27,12 @@ const resolvedApiBase = (() => {
     if (isBrowser) {
         const { protocol, hostname } = window.location;
         const port = 5000;
-        return `${protocol}//${hostname}:${port}`;
+
+        if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "0.0.0.0") {
+            return `${protocol}//${hostname}:${port}`;
+        }
+
+        return `${protocol}//${hostname}`.replace("menu.", "menuback.");
     }
 
     return "http://localhost:5000";
