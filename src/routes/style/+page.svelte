@@ -25,9 +25,14 @@
         content_spacing: number;
     };
 
+    type StyleAssets = {
+        logo: string;
+    };
+
     type StyleConfig = {
         colors: Record<string, string>;
         layouts: Record<string, LayoutConfig>;
+        assets: StyleAssets;
     };
 
     type PairField = "image_size" | "title_position" | "week_text_position";
@@ -48,6 +53,9 @@
     let statusMessage = $state("");
     let statusError = $state("");
     let validationErrors = $state<string[]>([]);
+    let isUploadingLogo = $state(false);
+    let logoUploadMessage = $state("");
+    let logoUploadError = $state("");
 
     onMount(() => {
         fetchConfig();
@@ -73,6 +81,8 @@
         statusMessage = "";
         statusError = "";
         validationErrors = [];
+    logoUploadMessage = "";
+    logoUploadError = "";
 
         try {
             const response = await fetch(buildApiUrl("/styleConfig"));
@@ -184,6 +194,71 @@
         }));
     }
 
+    function updateLogoPath(value: string) {
+        if (!styleConfig) {
+            return;
+        }
+
+        styleConfig = {
+            ...styleConfig,
+            assets: {
+                ...styleConfig.assets,
+                logo: value.trim()
+            }
+        };
+    }
+
+    async function handleLogoFileSelect(event: Event) {
+        const target = event.currentTarget as HTMLInputElement;
+        const file = target.files?.[0] ?? null;
+        target.value = "";
+
+        if (!file) {
+            return;
+        }
+
+        isUploadingLogo = true;
+        logoUploadMessage = "";
+        logoUploadError = "";
+
+        const formData = new FormData();
+        formData.append("imageFile", file, file.name);
+        const baseName = file.name.replace(/\.[^.]+$/, "");
+        formData.append("name", baseName);
+
+        try {
+            const response = await fetch(buildApiUrl("/logo"), {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await readJson(response);
+            if (!response.ok) {
+                logoUploadError =
+                    (data && typeof data === "object" && "message" in data && String(data.message)) ||
+                    "Impossible de mettre à jour le logo.";
+                return;
+            }
+
+            const message = (data && typeof data === "object" && "message" in data && String(data.message)) ||
+                "Logo mis à jour.";
+
+            if (data && typeof data === "object" && "config" in data && data.config) {
+                styleConfig = data.config as StyleConfig;
+            } else if (styleConfig && data && typeof data === "object" && data.logo) {
+                const logoPath = String((data.logo as Record<string, unknown>).path ?? styleConfig.assets.logo);
+                updateLogoPath(logoPath);
+            }
+
+            logoUploadMessage = message;
+        } catch (error) {
+            console.error("Failed to upload logo", error);
+            logoUploadError = "Impossible de mettre à jour le logo.";
+        } finally {
+            isUploadingLogo = false;
+        }
+    }
+
     async function handleSubmit(event: Event) {
         event.preventDefault();
         if (!styleConfig) {
@@ -281,6 +356,45 @@
                         </label>
                     {/each}
                 </div>
+            </section>
+
+            <section class="space-y-4">
+                <header>
+                    <h3 class="text-xl font-semibold">Logo principal</h3>
+                    <p class="text-sm text-gray-200">
+                        Choisissez le logo affiché sur les menus. Le chemin est relatif au dossier du générateur.
+                    </p>
+                </header>
+
+                <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] items-end">
+                    <label class="flex flex-col gap-2 text-sm">
+                        <span class="font-medium uppercase tracking-wide">Chemin relatif</span>
+                        <input
+                            type="text"
+                            value={styleConfig.assets.logo}
+                            oninput={(event) => updateLogoPath(getInputValue(event))}
+                            class="rounded border border-white/20 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                    </label>
+
+                    <label class="flex flex-col gap-2 text-sm">
+                        <span class="font-medium uppercase tracking-wide">Importer un logo</span>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onchange={handleLogoFileSelect}
+                            disabled={isUploadingLogo}
+                            class="block w-full text-sm text-gray-300 file:mr-4 file:rounded-md file:border-0 file:bg-orange-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-500"
+                        />
+                    </label>
+                </div>
+
+                {#if logoUploadMessage}
+                    <p class="text-sm text-green-200">{logoUploadMessage}</p>
+                {/if}
+                {#if logoUploadError}
+                    <p class="text-sm text-red-200">{logoUploadError}</p>
+                {/if}
             </section>
 
             <section class="space-y-5">

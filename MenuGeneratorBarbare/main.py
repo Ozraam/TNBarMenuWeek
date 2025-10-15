@@ -2,275 +2,149 @@ import json
 from datetime import date, timedelta
 import locale
 from pathlib import Path
+from typing import Any, Dict, Iterable, List, Tuple
+
 from unidecode import unidecode
-from PIL import Image, ImageDraw, ImageFont
+
 from paths import get_build_dir
+from playwright_renderer import PlaywrightRenderer
 from style_config import load_style_config
 
 # Constants
 PROJECT_ROOT = Path(__file__).resolve().parent
-LOGO_PATH = PROJECT_ROOT / "Barbare.png"
+DEFAULT_LOGO_FILENAME = "Barbare.png"
+DEFAULT_LOGO_PATH = PROJECT_ROOT / DEFAULT_LOGO_FILENAME
 FONT_PATH = PROJECT_ROOT / "OpenSans-VariableFont_wdth,wght.ttf"
 SANDWICH_DIR = PROJECT_ROOT / "Sandwichlogo"
 OUTPUT_DIR = get_build_dir()
 
 class MenuGenerator:
-    def __init__(self):
+    def __init__(self) -> None:
         self.output_dir = OUTPUT_DIR
         self.ensure_output_directory()
-        locale.setlocale(locale.LC_TIME, 'fr_FR.utf8')  # Set locale to French
+        locale.setlocale(locale.LC_TIME, "fr_FR.utf8")
 
         style_config = load_style_config()
         self.colors = style_config["colors"]
         self.layouts = self._prepare_layouts(style_config["layouts"])
+        logo_value = (style_config.get("assets", {}) or {}).get("logo", DEFAULT_LOGO_FILENAME)
+        self.logo_path, self.logo_warnings = self._resolve_logo_path(logo_value)
 
-    def _prepare_layouts(self, layouts):
-        prepared = {}
+    def _prepare_layouts(self, layouts: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        prepared: Dict[str, Dict[str, Any]] = {}
         for layout_name, layout in layouts.items():
             prepared[layout_name] = {
                 **layout,
-                "image_size": tuple(layout["image_size"]),
-                "title_position": tuple(layout["title_position"]),
-                "week_text_position": tuple(layout["week_text_position"]),
-                "grid": dict(layout["grid"]),
+                "image_size": tuple(int(value) for value in layout["image_size"]),
+                "title_position": tuple(int(value) for value in layout["title_position"]),
+                "week_text_position": tuple(int(value) for value in layout["week_text_position"]),
+                "grid": {
+                    key: int(value) for key, value in layout.get("grid", {}).items()
+                },
             }
         return prepared
-        
-    def ensure_output_directory(self):
-        """Ensure the output directory exists"""
+
+    def _resolve_logo_path(self, logo_value: str) -> Tuple[Path, List[str]]:
+        warnings: List[str] = []
+        default_path = DEFAULT_LOGO_PATH
+
+        candidate_value = (logo_value or DEFAULT_LOGO_FILENAME).strip()
+        candidate_path = default_path
+
+        if candidate_value:
+            candidate_path = (PROJECT_ROOT / candidate_value).resolve()
+            try:
+                candidate_path.relative_to(PROJECT_ROOT)
+            except ValueError:
+                warnings.append(
+                    f"Warning: logo path '{candidate_value}' is outside of the project directory. Using default logo."
+                )
+                candidate_path = default_path
+
+        if not candidate_path.exists():
+            warnings.append(
+                f"Warning: logo file '{candidate_value}' not found. Using default logo."
+            )
+            candidate_path = default_path
+
+        if not candidate_path.exists():
+            warnings.append("Warning: default logo file not found. Logo will be missing in the generated image.")
+
+        return candidate_path, warnings
+
+    def ensure_output_directory(self) -> None:
+        """Ensure the output directory exists."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-            
-    def get_next_week_text(self):
-        """Return the date of the next Monday and Friday in French format"""
+
+    def get_next_week_text(self) -> str:
+        """Return the date of the next Monday and Friday in French format."""
         today = date.today()
         days_ahead = 7 - today.weekday()
         monday = today + timedelta(days=days_ahead)
         friday = monday + timedelta(days=4)
-        return ("Semaine du " + monday.strftime("%d") + " au " + friday.strftime("%d %B\n%Y")).upper()
-    
-    def get_font(self, size):
-        """Get a font with the specified size"""
-        return ImageFont.truetype(str(FONT_PATH), size)
-    
-    def create_base_image(self, layout_type):
-        """Create a new image with the specified layout"""
-        layout = self.layouts[layout_type]
-        return Image.new('RGBA', layout["image_size"], color=self.colors["background"])
-    
-    def draw_header(self, img, layout_type):
-        """Draw the header with logo and title text"""
-        layout = self.layouts[layout_type]
-        draw = ImageDraw.Draw(img)
-        
-        # Add logo
-        logo = Image.open(LOGO_PATH)
-        logo_size = logo.size
-        desired_width = 360
-        desired_height = int(360 * logo_size[1] / logo_size[0])
-        logo = logo.resize((desired_width, desired_height))
-        img.paste(logo, (10, 10), logo)
-        
-        # Draw title
-        title_font = self.get_font(layout["title_font_size"])
-        draw.multiline_text(
-            layout["title_position"], 
-            layout["title_text"], 
-            font=title_font, 
-            fill=self.colors["secondary"], 
-            align="center", 
-            stroke_width=4, 
-            stroke_fill=self.colors["secondary"]
-        )
-        
-        # Draw week text
-        week_text = self.get_next_week_text()
-        if layout_type == "horizontal":
-            week_text = " ".join(week_text.split("\n"))
-            
-        week_font = self.get_font(layout["week_font_size"])
-        draw.text(
-            layout["week_text_position"], 
-            week_text, 
-            font=week_font, 
-            fill=self.colors["primary"], 
-            align="center", 
-            stroke_width=1, 
-            stroke_fill=self.colors["primary"], 
-            anchor=layout["week_text_anchor"]
-        )
-            
-        return img
-    
-    def create_day_grid(self, img, header, layout_type):
-        """Create the grid of days with alternating colors"""
-        layout = self.layouts[layout_type]
+        return (
+            "Semaine du "
+            + monday.strftime("%d")
+            + " au "
+            + friday.strftime("%d %B\n%Y")
+        ).upper()
+
+    def _normalize_content(
+        self, content: Iterable[Dict[str, Any]]
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        normalized: List[Dict[str, Any]] = []
+        warnings: List[str] = []
+
+        for day in content:
+            day_label = str(day.get("day") or "")
+            day_items: List[Dict[str, Any]] = list(day.get("content") or [])
+
+            if len(day_items) > 2:
+                warnings.append(
+                    "Warning: too many content for a day, only the first two will be displayed, "
+                    f"day: {day_label}"
+                )
+                day_items = day_items[:2]
+
+            normalized_items = []
+            for item in day_items:
+                normalized_items.append(
+                    {
+                        "text": str(item.get("text") or ""),
+                        "is_meal": bool(item.get("is_meal")),
+                        "img": str(item.get("img") or ""),
+                    }
+                )
+
+            normalized.append({"day": day_label, "content": normalized_items})
+
+        return normalized, warnings
+
+    def _build_cells(
+        self,
+        layout_name: str,
+        headers: List[str],
+        days: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        layout = self.layouts[layout_name]
         grid = layout["grid"]
-        draw = ImageDraw.Draw(img)
-        
-        # Create grid with alternating colors
-        for row in range(grid["rows"]):
-            for col in range(grid["cols"]):
-                y = grid["y_start"] + (row * grid["cell_height"])
-                x = col * grid["cell_width"]
-                
-                # Choose color based on alternating pattern
-                color = self.colors["primary"] if (row + col) % 2 == 0 else self.colors["secondary"]
-                
-                # Fill cell with color
-                img.paste(color, (
-                    x, 
-                    y, 
-                    x + grid["cell_width"], 
-                    y + grid["cell_height"]
-                ))
-        
-        # Add day headers to each cell
-        font_day = self.get_font(layout["day_font_size"])
-        days_to_process = header[:grid["rows"] * grid["cols"]]
-        
-        for i, day in enumerate(days_to_process):
-            if i >= grid["rows"] * grid["cols"]:
-                break
-                
-            row = i // grid["cols"]
-            col = i % grid["cols"]
-            
-            y = grid["y_start"] + (row * grid["cell_height"])
-            x = col * grid["cell_width"]
-            
-            # Draw separator lines
-            y_line_offset = 95
-            line_start_x = x + 10
-            line_end_x = x + grid["cell_width"] - 10
-            
-            draw.line(
-                (line_start_x, y + 10, line_end_x, y + 10), 
-                fill=self.colors["background"], 
-                width=5
-            )
-            draw.line(
-                (line_start_x, y + y_line_offset, line_end_x, y + y_line_offset), 
-                fill=self.colors["background"], 
-                width=5
-            )
-            
-            # Draw day text
-            draw.multiline_text(
-                (x + grid["cell_width"]//2, y + 50),
-                day.upper(), 
-                font=font_day, 
-                fill=self.colors["text"], 
-                align="center", 
-                stroke_width=2, 
-                stroke_fill=self.colors["text"],
-                anchor="mm"
-            )
-                
-        return img
-    
-    def break_line(self, string, max_width, draw, font):
-        """Break text into multiple lines to fit within max_width"""
-        if string == "RSAv":
-            return string
-            
-        words = string.split(" ")
-        lines = []
-        current_line = ""
-        
-        for word in words:
-            test_line = current_line + word + " "
-            current_width = draw.multiline_textbbox((0, 0), test_line, font=font)[2]
-            
-            if current_width > max_width:
-                lines.append(current_line)
-                current_line = word + " "
-            else:
-                current_line = test_line
-                
-        lines.append(current_line)
-        return "\n".join(lines)
-    
-    def add_content(self, img, week_data, layout_type):
-        """Add content to the image based on layout"""
-        layout = self.layouts[layout_type]
-        grid = layout["grid"]
-        warnings = []
-        desired_img_width = 250
-        draw = ImageDraw.Draw(img)
-        
-        # Get the number of cells based on the layout
         max_cells = grid["rows"] * grid["cols"]
-        days_to_process = week_data[:max_cells]
-        font = self.get_font(layout["content_font_size"])
-            
-        for i, day in enumerate(days_to_process):
-            if i >= max_cells:
-                break
-                
-            # Calculate cell position
-            row = i // grid["cols"]
-            col = i % grid["cols"]
-            
-            box_y = grid["y_start"] + (row * grid["cell_height"])
-            box_x = col * grid["cell_width"]
-            center_x = box_x + grid["cell_width"] // 2
-                
-            content_y = box_y + 100  # Initial y position for content
-            img_x = box_x + (grid["cell_width"] - desired_img_width) // 2
-            
-            # Limit to 2 content items per day
-            if len(day['content']) > 2:
-                day['content'] = day['content'][:2]
-                warnings.append(f"Warning: too many content for a day, only the first two will be displayed, day: {day['day']}")
-                
-            for content in day['content']:
-                if content['is_meal']:
-                    # Add meal image
-                    sandwich_path = SANDWICH_DIR / f"{content['img']}.png"
-                    sandwich_img = Image.open(sandwich_path).convert("RGBA")
-                    sandwich_size = sandwich_img.size
-                    desired_height = int(desired_img_width * sandwich_size[1] / sandwich_size[0])
-                    sandwich_img = sandwich_img.resize((desired_img_width, desired_height))
-                    img.paste(sandwich_img, (img_x, content_y), sandwich_img)
-                    
-                    # Add meal text
-                    formatted_text = self.break_line(content['text'], layout["max_text_width"], draw, font)
-                    text_height = draw.multiline_textbbox((0, 0), formatted_text, font=font)[3]
-                    text_offset = text_height // 4
-                    
-                    draw.text(
-                        (center_x, content_y + desired_height + text_offset), 
-                        formatted_text, 
-                        font=font, 
-                        fill=self.colors["text"], 
-                        align="center", 
-                        stroke_width=1, 
-                        stroke_fill=self.colors["text"], 
-                        anchor="mm"
-                    )
-                    
-                    content_y_increment = desired_height + text_height // 8
-                else:
-                    # Add non-meal text
-                    formatted_text = self.break_line(content['text'], layout["max_text_width"], draw, font)
-                    
-                    draw.multiline_text(
-                        (center_x, content_y + (grid["cell_height"] // 4)), 
-                        formatted_text, 
-                        font=font, 
-                        fill=self.colors["text"], 
-                        align="center", 
-                        stroke_width=1, 
-                        stroke_fill=self.colors["text"], 
-                        anchor="mm"
-                    )
-                    
-                    content_y_increment = grid["cell_height"] // 3
-                    
-                # Increment y position for next content
-                content_y += layout["content_spacing"] + content_y_increment
-                
-        return img, warnings
+
+        cells: List[Dict[str, Any]] = []
+        for index in range(max_cells):
+            header_label = str(headers[index]) if index < len(headers) else ""
+            day_entry = days[index] if index < len(days) else None
+
+            if not header_label and day_entry:
+                header_label = day_entry.get("day") or f"Jour {index + 1}"
+            elif not header_label:
+                header_label = f"Jour {index + 1}"
+
+            cell_items = day_entry.get("content") if day_entry else []
+
+            cells.append({"label": header_label, "items": cell_items})
+
+        return cells
     
     def transform_pascal_case(self, string):
         """Transform PascalCase to space-separated words"""
@@ -350,35 +224,64 @@ class MenuGenerator:
         return text.replace("{text-custom-french}", week_data["text-custom-french"]).replace("{text-custom-english}", week_data["text-custom-english"])
     
     def generate_menu(self, week_data, filename):
-        """Generate all menu artifacts: vertical image, horizontal image, and email text"""
-        # Create vertical image
-        vertical_img = self.create_base_image("vertical")
-        vertical_img = self.draw_header(vertical_img, "vertical")
-        vertical_img = self.create_day_grid(vertical_img, week_data["header"], "vertical")
-        vertical_img, v_warnings = self.add_content(vertical_img, week_data["content"], "vertical")
-        
-        # Create horizontal image
-        horizontal_img = self.create_base_image("horizontal")
-        horizontal_img = self.draw_header(horizontal_img, "horizontal")
-        horizontal_img = self.create_day_grid(horizontal_img, week_data["header"], "horizontal")
-        horizontal_img, h_warnings = self.add_content(horizontal_img, week_data["content"], "horizontal")
-        
-        # Generate email text
-        email_text = self.generate_email_text(week_data)
-        
-        # Save outputs
-        vertical_img.save(self.output_dir / f"{filename}-vertical.png")
-        horizontal_img.save(self.output_dir / f"{filename}-horizontal.png")
-        
-        with open(self.output_dir / "mail.txt", 'w', encoding="utf8") as f:
-            f.write(email_text)
-            
-        # Print any warnings
-        warnings = v_warnings + h_warnings
+        """Generate menu assets and return the image paths with the email text."""
+        normalized_content, normalization_warnings = self._normalize_content(
+            week_data.get("content", [])
+        )
+        normalized_week_data = dict(week_data)
+        normalized_week_data["content"] = normalized_content
+
+        week_text = self.get_next_week_text()
+        horizontal_week_text = " ".join(week_text.split("\n"))
+
+        vertical_cells = self._build_cells(
+            "vertical", week_data.get("header", []), normalized_content
+        )
+        horizontal_cells = self._build_cells(
+            "horizontal", week_data.get("header", []), normalized_content
+        )
+
+        renderer = PlaywrightRenderer(
+            colors=self.colors,
+            layouts=self.layouts,
+            font_path=FONT_PATH,
+            logo_path=self.logo_path,
+            sandwich_dir=SANDWICH_DIR,
+        )
+
+        vertical_path = self.output_dir / f"{filename}-vertical.png"
+        horizontal_path = self.output_dir / f"{filename}-horizontal.png"
+
+        warnings: List[str] = list(normalization_warnings)
+        warnings.extend(self.logo_warnings)
+
+        with renderer as browser_renderer:
+            warnings.extend(
+                browser_renderer.render_layout(
+                    "vertical",
+                    week_text=week_text,
+                    cells=vertical_cells,
+                    output_path=vertical_path,
+                )
+            )
+            warnings.extend(
+                browser_renderer.render_layout(
+                    "horizontal",
+                    week_text=horizontal_week_text,
+                    cells=horizontal_cells,
+                    output_path=horizontal_path,
+                )
+            )
+
+        email_text = self.generate_email_text(normalized_week_data)
+
+        with open(self.output_dir / "mail.txt", "w", encoding="utf8") as file:
+            file.write(email_text)
+
         if warnings:
             print("\n".join(warnings))
-            
-        return vertical_img, horizontal_img, email_text
+
+        return vertical_path, horizontal_path, email_text
 
 class CLIParser:
     def __init__(self):

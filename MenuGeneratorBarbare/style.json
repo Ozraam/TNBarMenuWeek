@@ -1,8 +1,8 @@
 {
     "colors": {
         "background": "#FFF4EA",
-        "primary": "#E6A515",
-        "secondary": "#B77236",
+        "primary": "#ff7800",
+        "secondary": "#000000",
         "text": "#FFF4EA"
     },
     "layouts": {
@@ -64,5 +64,8 @@
             "max_text_width": 390,
             "content_spacing": 30
         }
+    },
+    "assets": {
+        "logo": "Barbare.png"
     }
 }
