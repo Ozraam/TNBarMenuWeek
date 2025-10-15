@@ -1,5 +1,5 @@
-# Use an official Python runtime as a parent image
-FROM python:3.13-slim
+# Use Playwright's Python base image to ensure browser dependencies are available
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies required for Pillow
+# Install system dependencies required for Pillow and locale configuration
 RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libjpeg-dev \
@@ -32,14 +32,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the current directory contents into the container
 COPY . .
 
-# Create a non-root user with matching host UID/GID for proper file permissions
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-RUN groupadd -g $GROUP_ID appuser && useradd -u $USER_ID -g $GROUP_ID -m appuser \
-    && chown -R appuser:appuser /app \
-    && mkdir -p /app/build \
-    && chown appuser:appuser /app/build
-USER appuser
+
+# Use the pre-existing non-root Playwright user
+RUN mkdir -p /app/build && chown -R pwuser:pwuser /app
+USER pwuser
+# Browsers are preinstalled in the base image; ensure Chromium is available for consistency
+RUN playwright install chromium
 
 # Expose the port the app runs on
 EXPOSE 5000
