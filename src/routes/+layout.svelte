@@ -22,6 +22,9 @@
                 <a href="/newSandwich">Ajouter Sandwich</a>
             </li>
             <li class="hover:text-orange-500 transition-all duration-100">
+                <a href="/style">Style</a>
+            </li>
+            <li class="hover:text-orange-500 transition-all duration-100">
                 <a href="/about">About</a>
             </li>
         </ul>

@@ -6,6 +6,7 @@ from flask import Flask, jsonify, send_file, request, make_response
 from PIL import Image, UnidentifiedImageError
 from main import generate_img_from_args, CLIParser
 from paths import get_build_dir
+from style_config import load_style_config, save_style_config, validate_style_config
 
 app = Flask(__name__)
 
@@ -21,7 +22,7 @@ MAIL_FILE = BUILD_DIR / "mail.txt"
 DEFAULT_MAIL_FILE = DEFAULT_IMAGE_DIR / "mail.txt"
 ALLOWED_ORIGIN = os.getenv("CORS_ALLOW_ORIGIN", "*")
 ALLOWED_HEADERS = os.getenv("CORS_ALLOW_HEADERS", "Authorization, Content-Type")
-ALLOWED_METHODS = os.getenv("CORS_ALLOW_METHODS", "GET, POST, OPTIONS")
+ALLOWED_METHODS = os.getenv("CORS_ALLOW_METHODS", "GET, POST, PUT, OPTIONS")
 
 # Load meal list at application startup
 def load_meal_list():
@@ -156,6 +157,43 @@ def get_last_menu():
     if last_menu is None:
         return cors_response(jsonify({"error": "No menu generated yet"})), 400
     return cors_response(jsonify(last_menu))
+
+
+@app.route('/styleConfig', methods=['GET'])
+def get_style_config():
+    try:
+        config = load_style_config()
+    except Exception as exc:
+        app.logger.error(f"Failed to load style configuration: {exc}")
+        return cors_response(jsonify({"message": "Impossible de charger la configuration du style"})), 500
+
+    return cors_response(jsonify(config))
+
+
+@app.route('/styleConfig', methods=['PUT'])
+def update_style_config():
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return cors_response(jsonify({"message": "Un payload JSON valide est requis"})), 400
+
+    errors = validate_style_config(payload)
+    if errors:
+        response = jsonify({
+            "message": "Configuration de style invalide",
+            "errors": errors
+        })
+        return cors_response(response), 400
+
+    try:
+        saved = save_style_config(payload)
+    except Exception as exc:
+        app.logger.error(f"Failed to save style configuration: {exc}")
+        return cors_response(jsonify({"message": "Impossible d'enregistrer la configuration du style"})), 500
+
+    return cors_response(jsonify({
+        "message": "Configuration de style enregistrée",
+        "config": saved
+    }))
 
 @app.route('/getMailingText', methods=['GET'])
 def get_mailing_text():

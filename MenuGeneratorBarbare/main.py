@@ -5,17 +5,12 @@ from pathlib import Path
 from unidecode import unidecode
 from PIL import Image, ImageDraw, ImageFont
 from paths import get_build_dir
+from style_config import load_style_config
 
 # Constants
 PROJECT_ROOT = Path(__file__).resolve().parent
 LOGO_PATH = PROJECT_ROOT / "Barbare.png"
 FONT_PATH = PROJECT_ROOT / "OpenSans-VariableFont_wdth,wght.ttf"
-COLORS = {
-    "background": "#FFF4EA",
-    "primary": "#E6A515",
-    "secondary": "#B77236",
-    "text": "#FFF4EA"
-}
 SANDWICH_DIR = PROJECT_ROOT / "Sandwichlogo"
 OUTPUT_DIR = get_build_dir()
 
@@ -24,50 +19,22 @@ class MenuGenerator:
         self.output_dir = OUTPUT_DIR
         self.ensure_output_directory()
         locale.setlocale(locale.LC_TIME, 'fr_FR.utf8')  # Set locale to French
-        
-        # Define layout configurations for vertical and horizontal formats
-        self.layouts = {
-            "vertical": {
-                "image_size": (1080, 1920),
-                "title_position": (445, 30),
-                "title_text": "MENU DE LA\nSEMAINE",
-                "title_font_size": 90,
-                "week_text_position": (719, 348),
-                "week_text_anchor": "mm",
-                "week_font_size": 45,
-                "grid": {
-                    "rows": 2,
-                    "cols": 3,
-                    "cell_width": 360,
-                    "cell_height": 743,
-                    "y_start": 1920 - 743*2
-                },
-                "day_font_size": 70,
-                "content_font_size": 45,
-                "max_text_width": 300,
-                "content_spacing": 50
-            },
-            "horizontal": {
-                "image_size": (1920, 1080),
-                "title_position": (500, 80),
-                "title_text": "MENU DE LA SEMAINE",
-                "title_font_size": 110,
-                "week_text_position": (1075, 230),
-                "week_text_anchor": "mt",
-                "week_font_size": 45,
-                "grid": {
-                    "rows": 1,
-                    "cols": 5,
-                    "cell_width": 1920 // 5,
-                    "cell_height": 682,
-                    "y_start": 398
-                },
-                "day_font_size": 70,
-                "content_font_size": 40,
-                "max_text_width": 390,
-                "content_spacing": 30
+
+        style_config = load_style_config()
+        self.colors = style_config["colors"]
+        self.layouts = self._prepare_layouts(style_config["layouts"])
+
+    def _prepare_layouts(self, layouts):
+        prepared = {}
+        for layout_name, layout in layouts.items():
+            prepared[layout_name] = {
+                **layout,
+                "image_size": tuple(layout["image_size"]),
+                "title_position": tuple(layout["title_position"]),
+                "week_text_position": tuple(layout["week_text_position"]),
+                "grid": dict(layout["grid"]),
             }
-        }
+        return prepared
         
     def ensure_output_directory(self):
         """Ensure the output directory exists"""
@@ -88,7 +55,7 @@ class MenuGenerator:
     def create_base_image(self, layout_type):
         """Create a new image with the specified layout"""
         layout = self.layouts[layout_type]
-        return Image.new('RGBA', layout["image_size"], color=COLORS["background"])
+        return Image.new('RGBA', layout["image_size"], color=self.colors["background"])
     
     def draw_header(self, img, layout_type):
         """Draw the header with logo and title text"""
@@ -109,10 +76,10 @@ class MenuGenerator:
             layout["title_position"], 
             layout["title_text"], 
             font=title_font, 
-            fill=COLORS["secondary"], 
+            fill=self.colors["secondary"], 
             align="center", 
             stroke_width=4, 
-            stroke_fill=COLORS["secondary"]
+            stroke_fill=self.colors["secondary"]
         )
         
         # Draw week text
@@ -125,10 +92,10 @@ class MenuGenerator:
             layout["week_text_position"], 
             week_text, 
             font=week_font, 
-            fill=COLORS["primary"], 
+            fill=self.colors["primary"], 
             align="center", 
             stroke_width=1, 
-            stroke_fill=COLORS["primary"], 
+            stroke_fill=self.colors["primary"], 
             anchor=layout["week_text_anchor"]
         )
             
@@ -147,7 +114,7 @@ class MenuGenerator:
                 x = col * grid["cell_width"]
                 
                 # Choose color based on alternating pattern
-                color = COLORS["primary"] if (row + col) % 2 == 0 else COLORS["secondary"]
+                color = self.colors["primary"] if (row + col) % 2 == 0 else self.colors["secondary"]
                 
                 # Fill cell with color
                 img.paste(color, (
@@ -178,12 +145,12 @@ class MenuGenerator:
             
             draw.line(
                 (line_start_x, y + 10, line_end_x, y + 10), 
-                fill=COLORS["background"], 
+                fill=self.colors["background"], 
                 width=5
             )
             draw.line(
                 (line_start_x, y + y_line_offset, line_end_x, y + y_line_offset), 
-                fill=COLORS["background"], 
+                fill=self.colors["background"], 
                 width=5
             )
             
@@ -192,10 +159,10 @@ class MenuGenerator:
                 (x + grid["cell_width"]//2, y + 50),
                 day.upper(), 
                 font=font_day, 
-                fill=COLORS["text"], 
+                fill=self.colors["text"], 
                 align="center", 
                 stroke_width=2, 
-                stroke_fill=COLORS["text"],
+                stroke_fill=self.colors["text"],
                 anchor="mm"
             )
                 
@@ -275,10 +242,10 @@ class MenuGenerator:
                         (center_x, content_y + desired_height + text_offset), 
                         formatted_text, 
                         font=font, 
-                        fill=COLORS["text"], 
+                        fill=self.colors["text"], 
                         align="center", 
                         stroke_width=1, 
-                        stroke_fill=COLORS["text"], 
+                        stroke_fill=self.colors["text"], 
                         anchor="mm"
                     )
                     
@@ -291,10 +258,10 @@ class MenuGenerator:
                         (center_x, content_y + (grid["cell_height"] // 4)), 
                         formatted_text, 
                         font=font, 
-                        fill=COLORS["text"], 
+                        fill=self.colors["text"], 
                         align="center", 
                         stroke_width=1, 
-                        stroke_fill=COLORS["text"], 
+                        stroke_fill=self.colors["text"], 
                         anchor="mm"
                     )
                     
