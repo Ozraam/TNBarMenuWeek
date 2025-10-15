@@ -29,10 +29,12 @@ const resolvedApiBase = (() => {
         const port = 5000;
 
         if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "0.0.0.0") {
-            return `${protocol}//${hostname}:${port}`;
+            console.log(`${protocol}//${hostname}`.replace("menu.", "menuback."));
+            
+            return `${protocol}//${hostname}`.replace("menu.", "menuback.");
         }
 
-        return `${protocol}//${hostname}`.replace("menu.", "menuback.");
+        return `${protocol}//${hostname}:${port}`
     }
 
     return "http://localhost:5000";
