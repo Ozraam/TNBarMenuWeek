@@ -11,6 +11,19 @@ This document provides an overview of the API endpoints available in the TNBarMe
 - **Description**: Retrieves the list of available meals.
 - **Response**: A JSON array containing meal objects with `name` and `image` properties.
 
+### `POST /addSandwich`
+
+- **Description**: Adds a new sandwich to the meal list and optionally uploads its image.
+- **Request**: Accepts form-data or JSON with the following fields:
+  - `name` (required): Display name of the sandwich.
+  - `image` (optional if `imageFile` provided): Image code used when generating menus.
+  - `frenchDescription` (optional): French description shown in the admin UI.
+  - `englishDescription` (optional): English description; defaults to the French description.
+  - `isVegetarian` (optional): Boolean flag indicating whether the sandwich is vegetarian.
+  - `imageFile` (optional): Uploaded image file; converted to PNG and stored in `Sandwichlogo`.
+- **Persistence**: Basic sandwich metadata is stored in `mealList.json`; ingredient descriptions are appended to `ingredients.json`.
+- **Response**: On success returns HTTP `201` with a JSON object containing a `message`, the meal entry, and the stored ingredient metadata. Validation errors return HTTP `400` with a JSON message, while conflicts return HTTP `409`.
+
 ### `GET /getLastMenu`
 
 - **Description**: Retrieves the last generated menu.

@@ -44,6 +44,20 @@
 		}
 	}
 
+	async function safeParseJson(response: Response) {
+		const contentType = response.headers.get('content-type') ?? '';
+		if (!contentType.toLowerCase().includes('application/json')) {
+			return null;
+		}
+
+		try {
+			return await response.clone().json();
+		} catch (error) {
+			console.warn('Impossible de lire la réponse JSON du serveur', error);
+			return null;
+		}
+	}
+
 	function validateForm(): boolean {
 		let isValid = true;
 
@@ -122,8 +136,23 @@
 				// Refresh the list of existing sandwiches
 				fetchExistingSandwiches();
 			} else {
-				const error = await response.json();
-				formMessage = { text: error.message || 'Une erreur est survenue', type: 'error' };
+				const parsedError = await safeParseJson(response);
+				let errorText = '';
+				if (parsedError && typeof parsedError === 'object' && 'message' in parsedError) {
+					errorText = String(parsedError.message);
+				} else {
+					try {
+						const rawText = await response.text();
+						errorText = rawText.trim();
+					} catch (error) {
+						console.warn('Impossible de lire la réponse texte du serveur', error);
+					}
+				}
+
+				formMessage = { 
+					text: errorText || "Une erreur est survenue. Vérifiez que l'API \u00ab /addSandwich \u00bb est disponible.",
+					type: 'error' 
+				};
 			}
 		} catch (error) {
 			console.error('Error submitting form:', error);
