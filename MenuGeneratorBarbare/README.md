@@ -9,6 +9,7 @@ playwright install chromium
 
 To update the main logo displayed on the generated menus, upload a PNG image to the backend:
 
+> **Note:** Only PNG files are accepted for upload.
 ```
 curl -X POST \
 	-F "imageFile=@/path/to/logo.png" \
