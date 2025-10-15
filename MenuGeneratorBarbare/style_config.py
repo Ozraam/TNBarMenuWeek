@@ -54,6 +54,9 @@ DEFAULT_STYLE_CONFIG: Dict[str, Any] = {
             "max_text_width": 390,
             "content_spacing": 30
         }
+    },
+    "assets": {
+        "logo": "Barbare.png"
     }
 }
 
@@ -129,9 +132,15 @@ def normalize_style_config(config: Dict[str, Any]) -> Dict[str, Any]:
         layout_data = merged.get("layouts", {}).get(layout_name, {})
         normalized_layouts[layout_name] = _normalize_layout(layout_name, layout_data)
 
+    normalized_assets: Dict[str, str] = {}
+    for asset_key, default_value in DEFAULT_STYLE_CONFIG["assets"].items():
+        asset_value = _ensure_string(merged.get("assets", {}).get(asset_key), default_value)
+        normalized_assets[asset_key] = asset_value.replace("\\", "/")
+
     return {
         "colors": normalized_colors,
         "layouts": normalized_layouts,
+        "assets": normalized_assets,
     }
 
 
@@ -216,5 +225,14 @@ def validate_style_config(config: Any) -> List[str]:
                         errors.append(
                             f"'layouts.{layout_name}.grid.{grid_key}' must be a number"
                         )
+
+    assets = config.get("assets")
+    if not isinstance(assets, dict):
+        errors.append("'assets' must be an object")
+    else:
+        for asset_key in DEFAULT_STYLE_CONFIG["assets"].keys():
+            value = assets.get(asset_key)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"'assets.{asset_key}' must be a non-empty string")
 
     return errors

@@ -2,8 +2,11 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Any, Dict
+
 from flask import Flask, jsonify, send_file, request, make_response
 from PIL import Image, UnidentifiedImageError
+
 from main import generate_img_from_args, CLIParser
 from paths import get_build_dir
 from style_config import load_style_config, save_style_config, validate_style_config
@@ -13,6 +16,7 @@ app = Flask(__name__)
 # Constants
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_IMAGE_DIR = PROJECT_ROOT / "default_img"
+LOGO_DIR = PROJECT_ROOT / "logos"
 SANDWICH_DIR = PROJECT_ROOT / "Sandwichlogo"
 INGREDIENTS_FILE = PROJECT_ROOT / "ingredients.json"
 BUILD_DIR = get_build_dir()
@@ -123,6 +127,16 @@ def normalize_image_code(raw_code):
 
     return cleaned
 
+
+def _logo_response_payload(relative_path: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "message": "Logo mis à jour",
+        "logo": {
+            "path": relative_path
+        },
+        "config": config
+    }
+
 # Routes
 @app.route('/getMealList', methods=['GET'])
 def get_meal_list():
@@ -194,6 +208,46 @@ def update_style_config():
         "message": "Configuration de style enregistrée",
         "config": saved
     }))
+
+
+@app.route('/logo', methods=['POST'])
+def upload_logo():
+    image_file = request.files.get('imageFile') if request.files else None
+    if image_file is None or not image_file.filename:
+        return error_response("Un fichier image est requis", 400)
+
+    name_raw = (request.form.get('name') or Path(image_file.filename).stem or '').strip()
+    normalized_name = normalize_image_code(name_raw)
+    if not normalized_name:
+        normalized_name = "logo"
+
+    target_path = LOGO_DIR / f"{normalized_name}.png"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        image_file.stream.seek(0)
+        image = Image.open(image_file.stream)
+        image = image.convert("RGBA")
+        image.save(target_path, format="PNG")
+    except UnidentifiedImageError:
+        return error_response("Le fichier envoyé n'est pas une image valide", 400)
+    except Exception as exc:
+        app.logger.error(f"Failed to save uploaded logo: {exc}")
+        return error_response("Impossible d'enregistrer le logo", 500)
+
+    try:
+        config = load_style_config()
+        assets = dict(config.get('assets', {}))
+        relative_path = str(target_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+        assets['logo'] = relative_path
+        config['assets'] = assets
+        saved_config = save_style_config(config)
+    except Exception as exc:
+        app.logger.error(f"Failed to persist logo in style configuration: {exc}")
+        return error_response("Impossible de mettre à jour la configuration du style avec le logo", 500)
+
+    response_payload = _logo_response_payload(relative_path, saved_config)
+    return cors_response(jsonify(response_payload)), 201
 
 @app.route('/getMailingText', methods=['GET'])
 def get_mailing_text():

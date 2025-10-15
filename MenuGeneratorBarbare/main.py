@@ -12,7 +12,8 @@ from style_config import load_style_config
 
 # Constants
 PROJECT_ROOT = Path(__file__).resolve().parent
-LOGO_PATH = PROJECT_ROOT / "Barbare.png"
+DEFAULT_LOGO_FILENAME = "Barbare.png"
+DEFAULT_LOGO_PATH = PROJECT_ROOT / DEFAULT_LOGO_FILENAME
 FONT_PATH = PROJECT_ROOT / "OpenSans-VariableFont_wdth,wght.ttf"
 SANDWICH_DIR = PROJECT_ROOT / "Sandwichlogo"
 OUTPUT_DIR = get_build_dir()
@@ -26,6 +27,8 @@ class MenuGenerator:
         style_config = load_style_config()
         self.colors = style_config["colors"]
         self.layouts = self._prepare_layouts(style_config["layouts"])
+        logo_value = (style_config.get("assets", {}) or {}).get("logo", DEFAULT_LOGO_FILENAME)
+        self.logo_path, self.logo_warnings = self._resolve_logo_path(logo_value)
 
     def _prepare_layouts(self, layouts: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         prepared: Dict[str, Dict[str, Any]] = {}
@@ -40,6 +43,34 @@ class MenuGenerator:
                 },
             }
         return prepared
+
+    def _resolve_logo_path(self, logo_value: str) -> Tuple[Path, List[str]]:
+        warnings: List[str] = []
+        default_path = DEFAULT_LOGO_PATH
+
+        candidate_value = (logo_value or DEFAULT_LOGO_FILENAME).strip()
+        candidate_path = default_path
+
+        if candidate_value:
+            candidate_path = (PROJECT_ROOT / candidate_value).resolve()
+            try:
+                candidate_path.relative_to(PROJECT_ROOT)
+            except ValueError:
+                warnings.append(
+                    f"Warning: logo path '{candidate_value}' is outside of the project directory. Using default logo."
+                )
+                candidate_path = default_path
+
+        if not candidate_path.exists():
+            warnings.append(
+                f"Warning: logo file '{candidate_value}' not found. Using default logo."
+            )
+            candidate_path = default_path
+
+        if not candidate_path.exists():
+            warnings.append("Warning: default logo file not found. Logo will be missing in the generated image.")
+
+        return candidate_path, warnings
 
     def ensure_output_directory(self) -> None:
         """Ensure the output directory exists."""
@@ -214,7 +245,7 @@ class MenuGenerator:
             colors=self.colors,
             layouts=self.layouts,
             font_path=FONT_PATH,
-            logo_path=LOGO_PATH,
+            logo_path=self.logo_path,
             sandwich_dir=SANDWICH_DIR,
         )
 
@@ -222,6 +253,7 @@ class MenuGenerator:
         horizontal_path = self.output_dir / f"{filename}-horizontal.png"
 
         warnings: List[str] = list(normalization_warnings)
+        warnings.extend(self.logo_warnings)
 
         with renderer as browser_renderer:
             warnings.extend(

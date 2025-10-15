@@ -6,3 +6,14 @@ The image generator now relies on Playwright. After installing the Python depend
 ```
 playwright install chromium
 ```
+
+To update the main logo displayed on the generated menus, upload a PNG image to the backend:
+
+```
+curl -X POST \
+	-F "imageFile=@/path/to/logo.png" \
+	-F "name=nouveau-logo" \
+	http://localhost:5000/logo
+```
+
+The server stores the file in `MenuGeneratorBarbare/logos/` and updates `style.json` so the generator picks it up automatically.
