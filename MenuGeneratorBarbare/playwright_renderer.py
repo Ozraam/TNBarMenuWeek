@@ -98,11 +98,11 @@ class PlaywrightRenderer:
         width, height = layout["image_size"]
         grid = layout["grid"]
         content_spacing = int(layout.get("content_spacing", 30))
-        header_gap = 0 # max(8, content_spacing // 3)
-        header_inner_gap = 0 #max(6, header_gap // 2)
-        cell_padding_y = 6 # max(6, header_gap // 2)
-        items_gap = 0 # max(2, content_spacing // 2)
-        text_margin_bottom = 0 # max(2, content_spacing // 3)
+        header_gap = 0
+        header_inner_gap = 0
+        cell_padding_y = 6
+        items_gap = 0
+        text_margin_bottom = 0
         grid_width = int(grid["cell_width"]) * int(grid["cols"])
         grid_top_margin = int(grid.get("y_start", 0))
         image_width = self._meal_image_width
