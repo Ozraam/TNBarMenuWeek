@@ -71,9 +71,15 @@
             // Try to load from localStorage first
             const customConfig = localStorage.getItem('styleConfig');
             if (customConfig) {
-                styleConfig = JSON.parse(customConfig);
-                isLoading = false;
-                return;
+                try {
+                    styleConfig = JSON.parse(customConfig);
+                    isLoading = false;
+                    return;
+                } catch (parseError) {
+                    console.warn('Failed to parse custom style config, falling back to default:', parseError);
+                    // Remove corrupted data
+                    localStorage.removeItem('styleConfig');
+                }
             }
 
             // Otherwise load from static file

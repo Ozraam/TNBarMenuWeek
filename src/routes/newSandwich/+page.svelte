@@ -41,7 +41,15 @@
 			
 			// Load from localStorage (custom added meals)
 			const customMeals = localStorage.getItem('customMeals');
-			const customMealsList: MealOption[] = customMeals ? JSON.parse(customMeals) : [];
+			let customMealsList: MealOption[] = [];
+			if (customMeals) {
+				try {
+					customMealsList = JSON.parse(customMeals);
+				} catch (parseError) {
+					console.warn('Failed to parse custom meals, ignoring:', parseError);
+					localStorage.removeItem('customMeals');
+				}
+			}
 			
 			existingMeals = [...staticMeals, ...customMealsList];
 
@@ -50,7 +58,15 @@
 			const staticIngredients: Ingredient[] = await ingredientsResponse.json();
 			
 			const customIngredients = localStorage.getItem('customIngredients');
-			const customIngredientsList: Ingredient[] = customIngredients ? JSON.parse(customIngredients) : [];
+			let customIngredientsList: Ingredient[] = [];
+			if (customIngredients) {
+				try {
+					customIngredientsList = JSON.parse(customIngredients);
+				} catch (parseError) {
+					console.warn('Failed to parse custom ingredients, ignoring:', parseError);
+					localStorage.removeItem('customIngredients');
+				}
+			}
 			
 			existingIngredients = [...staticIngredients, ...customIngredientsList];
 		} catch (error) {

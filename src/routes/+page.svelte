@@ -54,7 +54,15 @@
         
         // Load custom ingredients from localStorage
         const customIngredients = localStorage.getItem('customIngredients');
-        const customIngredientsList = customIngredients ? JSON.parse(customIngredients) : [];
+        let customIngredientsList: Ingredient[] = [];
+        if (customIngredients) {
+            try {
+                customIngredientsList = JSON.parse(customIngredients);
+            } catch (parseError) {
+                console.warn('Failed to parse custom ingredients, ignoring:', parseError);
+                localStorage.removeItem('customIngredients');
+            }
+        }
         
         ingredients = [...staticIngredients, ...customIngredientsList];
 

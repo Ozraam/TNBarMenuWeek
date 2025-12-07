@@ -5,7 +5,10 @@ import type { MenuCell, MenuItem, Ingredient, MealOption } from './types';
  */
 export function getNextWeekText(): string {
 	const today = new Date();
-	const daysAhead = 7 - ((today.getDay() + 6) % 7); // Days until next Monday
+	// Calculate days until next Monday (0=Sunday, 1=Monday, etc.)
+	// Formula: (7 - (today + 6) % 7) gives us days until Monday
+	// E.g., if today is Wednesday (3), (3+6)%7 = 2, 7-2 = 5 days until Monday
+	const daysAhead = 7 - ((today.getDay() + 6) % 7);
 	const monday = new Date(today);
 	monday.setDate(today.getDate() + daysAhead);
 	
@@ -101,7 +104,8 @@ export function findIngredient(ingredients: Ingredient[], name: string): Ingredi
 	}
 
 	console.warn(`Ingredient not found: ${name}`);
-	return [`Not found: ${name}`, '', ''];
+	// Use French text to match the application's primary language
+	return [`Non trouvé: ${name}`, '', ''];
 }
 
 /**
