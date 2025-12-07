@@ -36,6 +36,7 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
-		"clsx": "^2.1.1"
+		"clsx": "^2.1.1",
+		"html2canvas": "^1.4.1"
 	}
 }

@@ -2,42 +2,80 @@
 	import { classList } from "$lib/classList";
     import OptionSelector from "$lib/imageConfiguration/OptionSelector.svelte";
 	import LoadingModal from "$lib/LoadingModal.svelte";
-	import { imgLinkState, loadingState } from "$lib/loadingState.svelte";
-    import ImageViewer from "$lib/preview/ImageViewer.svelte";
+	import { loadingState } from "$lib/loadingState.svelte";
+    import MenuViewer from "$lib/preview/MenuViewer.svelte";
     import TextPreview from "$lib/preview/TextPreview.svelte";
     import { onMount } from "svelte";
-    import { buildApiUrl } from "$lib/api";
+    import { menuState, saveMenuToLocalStorage, clearRegenerationFlag } from "$lib/menuState.svelte";
+    import { getNextWeekText, buildCells, generateEmailText } from "$lib/menuRenderer";
+    import type { MenuStyleConfig, Ingredient } from "$lib/menuRenderer/types";
 
     let customOpen = $state(true);
 
     let customClass = $derived(customOpen ? "p-3 h-full" : "h-8 p-0 overflow-hidden xl:overflow-auto")
 
     let mailText = $state("");
+    let styleConfig = $state<MenuStyleConfig | null>(null);
+    let ingredients = $state<Ingredient[]>([]);
 
-    let verticalImage : ImageViewer;
-    let horizontalImage : ImageViewer;
+    // Derived states for menu rendering
+    let weekText = $derived(getNextWeekText());
+    let horizontalWeekText = $derived(weekText.split('\n').join(' '));
+    
+    let verticalCells = $derived(
+        styleConfig ? buildCells(
+            'vertical',
+            menuState.data.header,
+            menuState.data.content,
+            styleConfig.layouts.vertical.grid.rows,
+            styleConfig.layouts.vertical.grid.cols
+        ) : []
+    );
 
-    onMount(() => {
-        getText();
+    let horizontalCells = $derived(
+        styleConfig ? buildCells(
+            'horizontal',
+            menuState.data.header,
+            menuState.data.content,
+            styleConfig.layouts.horizontal.grid.rows,
+            styleConfig.layouts.horizontal.grid.cols
+        ) : []
+    );
+
+    onMount(async () => {
+        // Load static data
+        const [styleRes, ingredientsRes] = await Promise.all([
+            fetch('/style.json'),
+            fetch('/ingredients.json')
+        ]);
+        
+        styleConfig = await styleRes.json();
+        ingredients = await ingredientsRes.json();
+
+        // Generate initial email text
+        updateEmailText();
     });
 
-    function generateImage() {
-        customOpen = !customOpen
+    function updateEmailText() {
+        if (ingredients.length > 0) {
+            mailText = generateEmailText(
+                menuState.data.content,
+                ingredients,
+                menuState.data['text-custom-french'],
+                menuState.data['text-custom-english']
+            );
+        }
     }
 
-    function getText() {
-        fetch(buildApiUrl("/getMailingText"), {
-            method: "GET",
-        }).then((data) => {
-                if (data.ok) {
-                    data.json().then((text_api) => {
-                        mailText = text_api.text;
-                    });
-                } else {
-                    alert("An error occured");
-                }
-            }
-        );
+    function generateImage() {
+        customOpen = !customOpen;
+    }
+
+    function handleMenuGenerated() {
+        updateEmailText();
+        saveMenuToLocalStorage();
+        clearRegenerationFlag();
+        loadingState.loading = false;
     }
 </script>
 
@@ -49,13 +87,7 @@
     <OptionSelector 
         class="transition-all xl:p-3 xl:h-auto xl:max-h-full overflow-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-linear-to-bl [&::-webkit-scrollbar-thumb]:from-amber-700 [&::-webkit-scrollbar-thumb]:to-orange-600 [&::-webkit-scrollbar-thumb]:rounded-full {customClass}"
         onclick={() => generateImage()}
-        imageGeneratedCallback={() => {
-            getText();
-            verticalImage?.getImage();
-            horizontalImage?.getImage();
-            loadingState.loading = false;
-            
-        }}
+        imageGeneratedCallback={handleMenuGenerated}
     >
         <div class="w-full xl:hidden">
             <button class="w-full cursor-pointer hover:underline" onclick="{() => customOpen = !customOpen}">
@@ -66,24 +98,34 @@
 
     <div class="flex gap-3 lg:max-h-full rounded-lg flex-1 md:flex-row flex-col w-full overflow-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-linear-to-bl [&::-webkit-scrollbar-thumb]:from-amber-700 [&::-webkit-scrollbar-thumb]:to-orange-600 [&::-webkit-scrollbar-thumb]:rounded-full">
         
-            <ImageViewer
+        {#if styleConfig}
+            <MenuViewer
                 name="vertical"
-                bind:this={verticalImage}
+                layoutName="vertical"
+                layout={styleConfig.layouts.vertical}
+                colors={styleConfig.colors}
+                weekText={weekText}
+                cells={verticalCells}
+                logoPath="/Barbare.png"
                 aspectRatio="aspect-1080/1920"
                 skeleton={loadingState.loading}
-                src={buildApiUrl(`/verticalMenu?epoch=${imgLinkState.vertical}`)}
-                alt="un placeholder"
             />
+        {/if}
         
         <div class="flex flex-1 flex-col gap-3 md:overflow-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-linear-to-bl [&::-webkit-scrollbar-thumb]:from-amber-700 [&::-webkit-scrollbar-thumb]:to-orange-600 [&::-webkit-scrollbar-thumb]:rounded-full">
 
-            <ImageViewer
-                name="horizontal"
-                bind:this={horizontalImage}
-                src={buildApiUrl(`/horizontalMenu?epoch=${imgLinkState.horizontal}`)}
-                alt="placeholder"
-                skeleton={loadingState.loading}
-            />
+            {#if styleConfig}
+                <MenuViewer
+                    name="horizontal"
+                    layoutName="horizontal"
+                    layout={styleConfig.layouts.horizontal}
+                    colors={styleConfig.colors}
+                    weekText={horizontalWeekText}
+                    cells={horizontalCells}
+                    logoPath="/Barbare.png"
+                    skeleton={loadingState.loading}
+                />
+            {/if}
 
             <TextPreview class="overflow-auto max-h-full [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-linear-to-bl [&::-webkit-scrollbar-thumb]:from-amber-700 [&::-webkit-scrollbar-thumb]:to-orange-600 [&::-webkit-scrollbar-thumb]:rounded-full" text={mailText} skeleton={loadingState.loading}/>
         </div>

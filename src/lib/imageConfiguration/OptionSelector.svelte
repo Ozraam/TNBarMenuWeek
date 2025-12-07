@@ -3,9 +3,10 @@
 	import DayOption from './DayOption.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
 	import type { DayOptions } from '../type';
-	import { imgLinkState, loadingState } from '$lib/loadingState.svelte';
-	import { buildApiUrl } from '$lib/api';
+	import { loadingState } from '$lib/loadingState.svelte';
 	import { onMount } from 'svelte';
+	import { menuState, markForRegeneration } from '$lib/menuState.svelte';
+	import type { MealOption } from '$lib/menuRenderer/types';
 
 	const {
 		class: class_ = '',
@@ -24,14 +25,14 @@
 	 */
 	function setupWeekOption(data: { header: string[]; content: any[] }) {
 		weekOption = data['header'].map((day: string, index: number) => {
-			let space: any[] = data['content'][index]['content'].map((space: any) => {
+			let space: any[] = data['content'][index]?.['content']?.map((space: any) => {
 				return {
 					is_used: true,
 					is_meal: space['is_meal'],
 					text: space['text'],
 					meal: space['img'] || undefined
 				};
-			});
+			}) || [];
 
 			space = space.concat(
 				Array(2 - space.length)
@@ -53,8 +54,6 @@
 		});
 	}
 
-	const customTextFrench = 'Voici le menu de cette semaine !';
-	const customTextEnglish = 'Here is the menu for this week!';
 	const dayAlias: Record<string, string> = {
 		mon: 'lundi',
 		monday: 'lundi',
@@ -75,12 +74,9 @@
 		pub: 'pub'
 	};
 
-	let mealList: {
-		name: string;
-		image: string;
-	}[] = $state([]);
+	let mealList: MealOption[] = $state([]);
 
-	onMount(() => {
+	onMount(async () => {
 		const keyboardHandler = (event: KeyboardEvent) => {
 			if ((event.ctrlKey || event.metaKey) && (event.key === 'k' || event.key === 'K')) {
 				event.preventDefault();
@@ -90,42 +86,36 @@
 
 		window.addEventListener('keydown', keyboardHandler);
 
-		fetch(buildApiUrl('/getMealList'), {
-			method: 'GET'
-		}).then((data) => {
-			if (data.ok) {
-				data.json().then((mealListAPI) => {
-					mealList = mealListAPI;
-				});
-			} else {
-				alert('An error occured');
-			}
-		});
+		// Load meal list from static file
+		try {
+			const response = await fetch('/mealList.json');
+			mealList = await response.json();
+		} catch (e) {
+			console.error('Failed to load meal list:', e);
+			mealList = [];
+		}
 
-		fetch(buildApiUrl('/getLastMenu'), {
-			method: 'GET'
-		}).then(async (data) => {
-			if (data.ok) {
-				const json = await data.json();
-				setupWeekOption(json);
-			} else {
-				weekOption = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'pub'].map((day) => {
-					return {
-						label: day,
-						space: Array(2)
-							.fill(0)
-							.map(() => {
-								return {
-									is_used: false,
-									is_meal: true,
-									text: '',
-									meal: undefined
-								};
-							})
-					};
-				});
-			}
-		});
+		// Initialize week options from menu state
+		if (menuState.data.content.length > 0 && menuState.data.content.some(d => d.content.length > 0)) {
+			setupWeekOption(menuState.data);
+		} else {
+			// Initialize with default empty structure
+			weekOption = menuState.data.header.map((day) => {
+				return {
+					label: day,
+					space: Array(2)
+						.fill(0)
+						.map(() => {
+							return {
+								is_used: false,
+								is_meal: true,
+								text: '',
+								meal: undefined
+							};
+						})
+				};
+			});
+		}
 
 		return () => {
 			window.removeEventListener('keydown', keyboardHandler);
@@ -487,33 +477,21 @@
 	}
 
 	/**
-	 * Converts the week options to a CLI command string.
-	 * @returns The CLI command string.
+	 * Updates menu state from current week options
 	 */
-	function weekOptionToCLI() {
-		let cli = `--header ${weekOption
-			.map((day) => {
-				return day.label;
-			})
-			.join(
-				' '
-			)} --custom-text-french "${customTextFrench}" --custom-text-english "${customTextEnglish}" `;
-
-		cli += weekOption
-			.map((day) => {
-				let dayCLI = `--content --day ${day.label} --day-content ${day.space
-					.filter((space) => space.is_used)
-					.map((space) => {
-						return `${space.is_meal ? '--is-meal ' : ''}--text "${space.is_meal ? getMealText(space.meal!) : space.text}" ${space.is_meal ? `--img ${space.meal} ` : ''}`.trim();
-					})
-					.filter((s) => s.length != 0)
-					.join(' ')}`.trim();
-
-				return dayCLI;
-			})
-			.join(' ');
-
-		return cli;
+	function updateMenuState() {
+		menuState.data.header = weekOption.map((day) => day.label);
+		menuState.data.content = weekOption.map((day) => ({
+			day: day.label,
+			content: day.space
+				.filter((space) => space.is_used)
+				.map((space) => ({
+					text: space.is_meal ? getMealText(space.meal!) : space.text,
+					is_meal: space.is_meal,
+					img: space.is_meal ? space.meal : undefined
+				}))
+		}));
+		markForRegeneration();
 	}
 
 	/**
@@ -521,24 +499,17 @@
 	 */
 	function startGeneration() {
 		loadingState.loading = true;
+		updateMenuState();
 		generateImage();
 	}
 
 	function generateImage() {
-		let cli = weekOptionToCLI();
-		fetch(buildApiUrl(`/generateImages?menu=${encodeURIComponent(cli)}`), {
-			method: 'GET'
-		}).then(async (data) => {
-			if (data.ok) {
-				const josn = await data.json();
-				imgLinkState.horizontal = josn.horizontal;
-				imgLinkState.vertical = josn.vertical;
-				imageGeneratedCallback();
-			} else {
-				loadingState.loading = false;
-				alert('An error occured');
-			}
-		});
+		// Update menu state and trigger regeneration
+		updateMenuState();
+		
+		// Call the callback to trigger re-rendering
+		imageGeneratedCallback();
+		
 		onclick();
 		contentDiv?.scrollTo(0, 0);
 	}
