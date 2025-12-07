@@ -86,10 +86,16 @@
 
 		window.addEventListener('keydown', keyboardHandler);
 
-		// Load meal list from static file
+		// Load meal list from static file and localStorage
 		try {
 			const response = await fetch('/mealList.json');
-			mealList = await response.json();
+			const staticMeals = await response.json();
+			
+			// Load custom meals from localStorage
+			const customMeals = localStorage.getItem('customMeals');
+			const customMealsList = customMeals ? JSON.parse(customMeals) : [];
+			
+			mealList = [...staticMeals, ...customMealsList];
 		} catch (e) {
 			console.error('Failed to load meal list:', e);
 			mealList = [];

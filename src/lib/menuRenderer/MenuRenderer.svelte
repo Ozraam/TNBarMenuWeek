@@ -13,34 +13,42 @@
 
 	let { layoutName, layout, colors, weekText, cells, logoPath, class: className }: Props = $props();
 
-	const width = layout.image_size[0];
-	const height = layout.image_size[1];
-	const grid = layout.grid;
-	const contentSpacing = layout.content_spacing || 30;
+	// Use $derived for computed values that depend on props
+	const width = $derived(layout.image_size[0]);
+	const height = $derived(layout.image_size[1]);
+	const grid = $derived(layout.grid);
+	const contentSpacing = $derived(layout.content_spacing || 30);
+	const gridWidth = $derived(grid.cell_width * grid.cols);
+	const gridTopMargin = $derived(grid.y_start || 0);
 
-	let headerGap = 0;
-	let headerInnerGap = 0;
-	let cellPaddingY = 6;
-	let itemsGap = 0;
-	let textMarginBottom = 0;
-	const gridWidth = grid.cell_width * grid.cols;
-	const gridTopMargin = grid.y_start || 0;
-	let imageWidth = 250;
-	let imageTitleGap = 0;
-	let cellPaddingBottom = 0;
-	let cellPaddingX = 0;
-
-	if (layoutName === 'horizontal') {
-		headerGap = Math.max(10, contentSpacing / 3);
-		headerInnerGap = Math.max(8, headerGap / 2);
-		imageWidth = Math.min(250, Math.max(140, grid.cell_width * 0.55));
-		itemsGap = Math.max(8, contentSpacing / 3);
-		textMarginBottom = Math.max(6, contentSpacing / 4);
-		cellPaddingY = Math.max(8, headerGap / 3);
-		imageTitleGap = 2;
-		cellPaddingBottom = cellPaddingY + 12;
-		cellPaddingX = Math.max(16, grid.cell_width / 12);
-	}
+	// Compute layout-specific values
+	const headerGap = $derived(
+		layoutName === 'horizontal' ? Math.max(10, contentSpacing / 3) : 0
+	);
+	const headerInnerGap = $derived(
+		layoutName === 'horizontal' ? Math.max(8, headerGap / 2) : 0
+	);
+	const cellPaddingY = $derived(
+		layoutName === 'horizontal' ? Math.max(8, headerGap / 3) : 6
+	);
+	const itemsGap = $derived(
+		layoutName === 'horizontal' ? Math.max(8, contentSpacing / 3) : 0
+	);
+	const textMarginBottom = $derived(
+		layoutName === 'horizontal' ? Math.max(6, contentSpacing / 4) : 0
+	);
+	const imageWidth = $derived(
+		layoutName === 'horizontal' 
+			? Math.min(250, Math.max(140, grid.cell_width * 0.55))
+			: 250
+	);
+	const imageTitleGap = $derived(layoutName === 'horizontal' ? 2 : 0);
+	const cellPaddingBottom = $derived(
+		layoutName === 'horizontal' ? cellPaddingY + 12 : 0
+	);
+	const cellPaddingX = $derived(
+		layoutName === 'horizontal' ? Math.max(16, grid.cell_width / 12) : 0
+	);
 
 	function getCellBackground(index: number): string {
 		const row = Math.floor(index / grid.cols);
@@ -124,13 +132,13 @@
 					{#each cell.items as item}
 						<div class="item {item.is_meal ? 'meal' : 'note'}" style:gap="{imageTitleGap}px">
 							{#if item.is_meal && item.img}
-								{#if item.img}
-									<img
-										src="/Sandwichlogo/{item.img}.png"
-										alt={item.img}
-										style:width="{imageWidth}px"
-									/>
-								{/if}
+								{@const customImages = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('customImages') || '{}') : {}}
+								{@const imageSource = customImages[item.img] || `/Sandwichlogo/${item.img}.png`}
+								<img
+									src={imageSource}
+									alt={item.img}
+									style:width="{imageWidth}px"
+								/>
 							{/if}
 							<div class="item-text" style:margin-bottom="{textMarginBottom}px">
 								{@html item.text.replace(/\n/g, '<br>')}

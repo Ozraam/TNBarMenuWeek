@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { classList } from '$lib/classList';
 	import { onMount } from 'svelte';
-	import { buildApiUrl } from '$lib/api';
+	import type { MealOption, Ingredient } from '$lib/menuRenderer/types';
 	
 	// Import our new components
 	import SandwichBasicInfo from '$lib/sandwichForm/SandwichBasicInfo.svelte';
@@ -16,7 +16,8 @@
 	let englishDescription = $state('');
 	let isVegetarian = $state(false);
 	let uploadedImage = $state<File | null>(null);
-	let existingNames = $state<string[]>([]);
+	let existingMeals = $state<MealOption[]>([]);
+	let existingIngredients = $state<Ingredient[]>([]);
 	let isSubmitting = $state(false);
 	let formMessage = $state({ text: '', type: '' });
 
@@ -28,33 +29,32 @@
 	let codeError = $state('');
 	let descriptionError = $state('');
 
-	onMount(() => {
-		fetchExistingSandwiches();
+	onMount(async () => {
+		await loadExistingData();
 	});
 
-	async function fetchExistingSandwiches() {
+	async function loadExistingData() {
 		try {
-			const response = await fetch(buildApiUrl('/getMealList'));
-			if (response.ok) {
-				const mealList = await response.json();
-				existingNames = mealList.map((meal: any) => meal.name);
-			}
-		} catch (error) {
-			console.error('Failed to fetch existing sandwiches:', error);
-		}
-	}
+			// Load meal list from static file
+			const mealsResponse = await fetch('/mealList.json');
+			const staticMeals: MealOption[] = await mealsResponse.json();
+			
+			// Load from localStorage (custom added meals)
+			const customMeals = localStorage.getItem('customMeals');
+			const customMealsList: MealOption[] = customMeals ? JSON.parse(customMeals) : [];
+			
+			existingMeals = [...staticMeals, ...customMealsList];
 
-	async function safeParseJson(response: Response) {
-		const contentType = response.headers.get('content-type') ?? '';
-		if (!contentType.toLowerCase().includes('application/json')) {
-			return null;
-		}
-
-		try {
-			return await response.clone().json();
+			// Load ingredients
+			const ingredientsResponse = await fetch('/ingredients.json');
+			const staticIngredients: Ingredient[] = await ingredientsResponse.json();
+			
+			const customIngredients = localStorage.getItem('customIngredients');
+			const customIngredientsList: Ingredient[] = customIngredients ? JSON.parse(customIngredients) : [];
+			
+			existingIngredients = [...staticIngredients, ...customIngredientsList];
 		} catch (error) {
-			console.warn('Impossible de lire la réponse JSON du serveur', error);
-			return null;
+			console.error('Failed to load existing data:', error);
 		}
 	}
 
@@ -70,7 +70,7 @@
 		if (!sandwichName.trim()) {
 			nameError = 'Le nom du sandwich est requis';
 			isValid = false;
-		} else if (existingNames.includes(sandwichName.trim())) {
+		} else if (existingMeals.some(m => m.name.toLowerCase() === sandwichName.trim().toLowerCase())) {
 			nameError = 'Ce nom de sandwich existe déjà';
 			isValid = false;
 		}
@@ -78,6 +78,9 @@
 		// Validate image code
 		if (!imageCode.trim() && !uploadedImage) {
 			codeError = 'Un code d\'image ou un fichier est requis';
+			isValid = false;
+		} else if (imageCode.trim() && existingMeals.some(m => m.image.toLowerCase() === imageCode.trim().toLowerCase())) {
+			codeError = 'Ce code d\'image est déjà utilisé';
 			isValid = false;
 		}
 
@@ -100,64 +103,67 @@
 		formMessage = { text: '', type: '' };
 
 		try {
-			// Create formData
-			const formData = new FormData();
-			formData.append('name', sandwichName);
-			formData.append('image', imageCode);
-			formData.append('frenchDescription', frenchDescription);
-			formData.append('englishDescription', englishDescription || frenchDescription);
-			formData.append('isVegetarian', isVegetarian.toString());
+			// Generate image code from name if not provided
+			let finalImageCode = imageCode.trim() || sandwichName.trim().replace(/\s+/g, '');
 			
+			// Store uploaded image as data URL if provided
 			if (uploadedImage) {
-				formData.append('imageFile', uploadedImage);
+				const reader = new FileReader();
+				reader.onload = async (e) => {
+					const imageData = e.target?.result as string;
+					const customImages = JSON.parse(localStorage.getItem('customImages') || '{}');
+					customImages[finalImageCode] = imageData;
+					localStorage.setItem('customImages', JSON.stringify(customImages));
+				};
+				reader.readAsDataURL(uploadedImage);
 			}
 
-			// This is a placeholder endpoint - actual implementation would depend on your backend
-			const response = await fetch(buildApiUrl('/addSandwich'), {
-				method: 'POST',
-				body: formData
-			});
+			// Add to meal list
+			const newMeal: MealOption = {
+				name: sandwichName.trim(),
+				image: finalImageCode
+			};
 
-			if (response.ok) {
-				formMessage = { 
-					text: 'Sandwich ajouté avec succès! Vous pouvez maintenant l\'utiliser dans les menus.', 
-					type: 'success' 
-				};
-				
-				// Reset form
-				sandwichName = '';
-				imageCode = '';
-				frenchDescription = '';
-				englishDescription = '';
-				isVegetarian = false;
-				uploadedImage = null;
-				imagePreview = '';
-				
-				// Refresh the list of existing sandwiches
-				fetchExistingSandwiches();
-			} else {
-				const parsedError = await safeParseJson(response);
-				let errorText = '';
-				if (parsedError && typeof parsedError === 'object' && 'message' in parsedError) {
-					errorText = String(parsedError.message);
-				} else {
-					try {
-						const rawText = await response.text();
-						errorText = rawText.trim();
-					} catch (error) {
-						console.warn('Impossible de lire la réponse texte du serveur', error);
-					}
-				}
+			const customMeals = JSON.parse(localStorage.getItem('customMeals') || '[]');
+			customMeals.push(newMeal);
+			localStorage.setItem('customMeals', JSON.stringify(customMeals));
 
-				formMessage = { 
-					text: errorText || "Une erreur est survenue. Vérifiez que l'API \u00ab /addSandwich \u00bb est disponible.",
-					type: 'error' 
-				};
+			// Add to ingredients
+			let ingredientName = sandwichName.trim();
+			if (isVegetarian && !ingredientName.toLowerCase().includes('végé') && !ingredientName.toLowerCase().includes('veggie')) {
+				ingredientName = `${ingredientName} (végé/veggie)`;
 			}
+
+			const newIngredient: Ingredient = [
+				ingredientName,
+				frenchDescription.trim(),
+				(englishDescription.trim() || frenchDescription.trim())
+			];
+
+			const customIngredients = JSON.parse(localStorage.getItem('customIngredients') || '[]');
+			customIngredients.push(newIngredient);
+			localStorage.setItem('customIngredients', JSON.stringify(customIngredients));
+
+			formMessage = { 
+				text: 'Sandwich ajouté avec succès! Vous pouvez maintenant l\'utiliser dans les menus.', 
+				type: 'success' 
+			};
+			
+			// Reset form
+			sandwichName = '';
+			imageCode = '';
+			frenchDescription = '';
+			englishDescription = '';
+			isVegetarian = false;
+			uploadedImage = null;
+			imagePreview = '';
+			
+			// Refresh the list
+			await loadExistingData();
 		} catch (error) {
 			console.error('Error submitting form:', error);
 			formMessage = { 
-				text: 'Une erreur est survenue lors de la création du sandwich. Vérifiez que le serveur est en ligne.', 
+				text: 'Une erreur est survenue lors de la création du sandwich.', 
 				type: 'error' 
 			};
 		} finally {

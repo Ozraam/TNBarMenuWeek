@@ -50,7 +50,13 @@
         ]);
         
         styleConfig = await styleRes.json();
-        ingredients = await ingredientsRes.json();
+        const staticIngredients = await ingredientsRes.json();
+        
+        // Load custom ingredients from localStorage
+        const customIngredients = localStorage.getItem('customIngredients');
+        const customIngredientsList = customIngredients ? JSON.parse(customIngredients) : [];
+        
+        ingredients = [...staticIngredients, ...customIngredientsList];
 
         // Generate initial email text
         updateEmailText();
