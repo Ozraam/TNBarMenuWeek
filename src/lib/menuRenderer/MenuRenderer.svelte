@@ -19,7 +19,6 @@
 	const grid = $derived(layout.grid);
 	const contentSpacing = $derived(layout.content_spacing || 30);
 	const gridWidth = $derived(grid.cell_width * grid.cols);
-	const gridTopMargin = $derived(grid.y_start || 0);
 
 	// Compute layout-specific values
 	const headerGap = $derived(
@@ -55,30 +54,6 @@
 		const col = index % grid.cols;
 		return (row + col) % 2 === 0 ? colors.primary : colors.secondary;
 	}
-
-	function getWeekAnchorStyle(): string {
-		const [x, y] = layout.week_text_position;
-		const anchor = layout.week_text_anchor || 'lt';
-
-		const transforms: string[] = [];
-		const horizontal = anchor[0] || 'l';
-		const vertical = anchor[1] || 't';
-
-		if (horizontal === 'm') {
-			transforms.push('translateX(-50%)');
-		} else if (horizontal === 'r') {
-			transforms.push('translateX(-100%)');
-		}
-
-		if (vertical === 'm') {
-			transforms.push('translateY(-50%)');
-		} else if (vertical === 'b') {
-			transforms.push('translateY(-100%)');
-		}
-
-		const transformStyle = transforms.length ? `transform: ${transforms.join(' ')};` : '';
-		return `left: ${x}px; top: ${y}px; ${transformStyle}`;
-	}
 </script>
 
 <div
@@ -87,27 +62,27 @@
 	style:height="{height}px"
 	style:background={colors.background}
 >
-	<img class="menu-logo" src={logoPath} alt="Logo" />
-	<div
-		class="menu-title"
-		style:left="{layout.title_position[0]}px"
-		style:top="{layout.title_position[1]}px"
-		style:font-size="{layout.title_font_size}px"
-		style:color={colors.secondary}
-	>
-		{@html layout.title_text.replace(/\n/g, '<br>')}
-	</div>
-	<div
-		class="menu-week"
-		style={getWeekAnchorStyle()}
-		style:font-size="{layout.week_font_size}px"
-		style:color={colors.primary}
-	>
-		{@html weekText.replace(/\n/g, '<br>')}
+	<div class="menu-header">
+		<img class="menu-logo" src={logoPath} alt="Logo" />
+		<div class="menu-header-text">
+			<div
+				class="menu-title"
+				style:font-size="{layout.title_font_size}px"
+				style:color={colors.secondary}
+			>
+				{@html layout.title_text.replace(/\n/g, '<br>')}
+			</div>
+			<div
+				class="menu-week"
+				style:font-size="{layout.week_font_size}px"
+				style:color={colors.primary}
+			>
+				{@html weekText.replace(/\n/g, '<br>')}
+			</div>
+		</div>
 	</div>
 	<div
 		class="menu-grid"
-		style:margin-top="{gridTopMargin}px"
 		style:width="{gridWidth}px"
 		style:grid-template-columns="repeat({grid.cols}, {grid.cell_width}px)"
 		style:grid-auto-rows="{grid.cell_height}px"
@@ -159,21 +134,34 @@
 	}
 
 	.menu-container {
-		position: relative;
+		display: flex;
+		flex-direction: column;
 		overflow: hidden;
 		font-family: 'MenuFont', 'Open Sans', sans-serif;
 	}
 
+	.menu-header {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 10px;
+		gap: 20px;
+	}
+
 	.menu-logo {
-		position: absolute;
-		left: 10px;
-		top: 10px;
 		width: 360px;
 		height: auto;
+		flex-shrink: 0;
+	}
+
+	.menu-header-text {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 15px;
 	}
 
 	.menu-title {
-		position: absolute;
 		font-weight: 700;
 		line-height: 1.05;
 		text-align: center;
@@ -181,8 +169,6 @@
 	}
 
 	.menu-week {
-		width: max-content;
-		position: absolute;
 		font-weight: 600;
 		text-transform: uppercase;
 		line-height: 1.1;
@@ -191,11 +177,10 @@
 	}
 
 	.menu-grid {
-		position: relative;
-		margin-left: auto;
-		margin-right: auto;
 		display: grid;
 		justify-content: center;
+		margin: 0 auto;
+		flex: 1;
 	}
 
 	.menu-cell {
