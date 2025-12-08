@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { buildApiUrl } from "$lib/api";
 
     type LayoutGrid = {
         rows: number;
@@ -52,7 +51,6 @@
     let loadError = $state("");
     let statusMessage = $state("");
     let statusError = $state("");
-    let validationErrors = $state<string[]>([]);
     let isUploadingLogo = $state(false);
     let logoUploadMessage = $state("");
     let logoUploadError = $state("");
@@ -61,43 +59,37 @@
         fetchConfig();
     });
 
-    async function readJson(response: Response) {
-        const contentType = response.headers.get("content-type") ?? "";
-        if (!contentType.toLowerCase().includes("application/json")) {
-            return null;
-        }
-
-        try {
-            return await response.clone().json();
-        } catch (error) {
-            console.warn("Impossible d'interpreter la reponse JSON", error);
-            return null;
-        }
-    }
-
     async function fetchConfig() {
         isLoading = true;
         loadError = "";
         statusMessage = "";
         statusError = "";
-        validationErrors = [];
-    logoUploadMessage = "";
-    logoUploadError = "";
+        logoUploadMessage = "";
+        logoUploadError = "";
 
         try {
-            const response = await fetch(buildApiUrl("/styleConfig"));
+            // Try to load from localStorage first
+            const customConfig = localStorage.getItem('styleConfig');
+            if (customConfig) {
+                try {
+                    styleConfig = JSON.parse(customConfig);
+                    isLoading = false;
+                    return;
+                } catch (parseError) {
+                    console.warn('Failed to parse custom style config, falling back to default:', parseError);
+                    // Remove corrupted data
+                    localStorage.removeItem('styleConfig');
+                }
+            }
+
+            // Otherwise load from static file
+            const response = await fetch('/style.json');
             if (!response.ok) {
-                const data = await readJson(response);
-                loadError =
-                    (data && typeof data === "object" && "message" in data && String(data.message)) ||
-                    "Impossible de charger la configuration du style.";
+                loadError = "Impossible de charger la configuration du style.";
                 return;
             }
 
-            const data = (await readJson(response)) as StyleConfig | null;
-            if (data) {
-                styleConfig = data;
-            }
+            styleConfig = await response.json();
         } catch (error) {
             console.error("Failed to fetch style config", error);
             loadError = "Impossible de charger la configuration du style.";
@@ -221,40 +213,33 @@
         logoUploadMessage = "";
         logoUploadError = "";
 
-        const formData = new FormData();
-        formData.append("imageFile", file, file.name);
-        const baseName = file.name.replace(/\.[^.]+$/, "");
-        formData.append("name", baseName);
-
         try {
-            const response = await fetch(buildApiUrl("/logo"), {
-                method: "POST",
-                body: formData
-            });
+            // Read file as data URL
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imageData = e.target?.result as string;
+                const baseName = file.name.replace(/\.[^.]+$/, "");
+                
+                // Store in custom images
+                const customImages = JSON.parse(localStorage.getItem('customImages') || '{}');
+                customImages[baseName] = imageData;
+                localStorage.setItem('customImages', JSON.stringify(customImages));
 
-            const data = await readJson(response);
-            if (!response.ok) {
-                logoUploadError =
-                    (data && typeof data === "object" && "message" in data && String(data.message)) ||
-                    "Impossible de mettre à jour le logo.";
-                return;
-            }
-
-            const message = (data && typeof data === "object" && "message" in data && String(data.message)) ||
-                "Logo mis à jour.";
-
-            if (data && typeof data === "object" && "config" in data && data.config) {
-                styleConfig = data.config as StyleConfig;
-            } else if (styleConfig && data && typeof data === "object" && data.logo) {
-                const logoPath = String((data.logo as Record<string, unknown>).path ?? styleConfig.assets.logo);
-                updateLogoPath(logoPath);
-            }
-
-            logoUploadMessage = message;
+                // Update style config
+                if (styleConfig) {
+                    updateLogoPath(baseName);
+                    logoUploadMessage = "Logo mis à jour.";
+                }
+                isUploadingLogo = false;
+            };
+            reader.onerror = () => {
+                logoUploadError = "Impossible de lire le fichier.";
+                isUploadingLogo = false;
+            };
+            reader.readAsDataURL(file);
         } catch (error) {
             console.error("Failed to upload logo", error);
             logoUploadError = "Impossible de mettre à jour le logo.";
-        } finally {
             isUploadingLogo = false;
         }
     }
@@ -268,37 +253,11 @@
         isSaving = true;
         statusMessage = "";
         statusError = "";
-        validationErrors = [];
 
         try {
-            const response = await fetch(buildApiUrl("/styleConfig"), {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(styleConfig)
-            });
-
-            const data = await readJson(response);
-            if (!response.ok) {
-                statusError =
-                    (data && typeof data === "object" && "message" in data && String(data.message)) ||
-                    "Impossible d'enregistrer la configuration du style.";
-
-                if (data && typeof data === "object" && "errors" in data && Array.isArray(data.errors)) {
-                    validationErrors = data.errors.map((err) => String(err));
-                }
-                return;
-            }
-
-            if (data && typeof data === "object") {
-                if ("config" in data && data.config) {
-                    styleConfig = data.config as StyleConfig;
-                }
-                statusMessage = "message" in data ? String(data.message) : "Configuration enregistree.";
-            } else {
-                statusMessage = "Configuration enregistree.";
-            }
+            // Save to localStorage
+            localStorage.setItem('styleConfig', JSON.stringify(styleConfig));
+            statusMessage = "Configuration enregistrée dans le navigateur.";
         } catch (error) {
             console.error("Failed to save style config", error);
             statusError = "Impossible d'enregistrer la configuration du style.";
@@ -626,13 +585,6 @@
             {#if statusError}
                 <div class="rounded border border-red-400/30 bg-red-500/20 px-4 py-3 text-sm text-red-100">
                     <p>{statusError}</p>
-                    {#if validationErrors.length}
-                        <ul class="mt-2 list-disc pl-5 space-y-1">
-                            {#each validationErrors as item}
-                                <li>{item}</li>
-                            {/each}
-                        </ul>
-                    {/if}
                 </div>
             {/if}
 
